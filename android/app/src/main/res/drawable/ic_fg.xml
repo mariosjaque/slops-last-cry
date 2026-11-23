@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original icon: a simple crescent moon over a dark sky. Not taken from the game. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#E8E2D0"
+        android:pathData="M60,30 A24,24 0 1,0 78,66 A19,19 0 1,1 60,30 Z" />
+    <path android:fillColor="#8A1C1C"
+        android:pathData="M34,76 L74,76 L74,79 L34,79 Z" />
+</vector>

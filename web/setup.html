@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Slop's Last Cry: setup</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e4dc; font: 16px/1.55 Georgia, "Times New Roman", serif; }
+  main { max-width: 34em; margin: 0 auto; padding: 8vh 1.5em 3em; }
+  h1 { font-weight: normal; letter-spacing: .14em; text-transform: uppercase; font-size: 20px; text-align: center; margin: 0 0 1.5em; }
+  .box { background: linear-gradient(135deg, #111c3c, #2d3c70 55%, #56679f); border: 1px solid #000; border-radius: 6px; padding: 1.2em 1.4em; box-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  .step { margin: 0 0 1.1em; }
+  .step b { display: block; margin-bottom: .3em; }
+  button { font: inherit; color: #fff; background: rgba(255,255,255,.12); border: 1px solid #000; border-radius: 4px; padding: .55em 1.1em; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,.22); }
+  button:disabled { opacity: .45; cursor: default; }
+  .ok { color: #9fe0a0; }
+  .bad { color: #ff8a80; }
+  .muted { color: rgba(255,255,255,.65); font-size: 14px; }
+  progress { width: 100%; height: 10px; margin: .6em 0 .2em; accent-color: #a8372c; }
+  #status { min-height: 1.5em; }
+  #warn { font-size: 13px; color: #ffcc80; white-space: pre-wrap; }
+  a { color: #fff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Slop's Last Cry</h1>
+  <div class="box" id="ui">
+    <p class="muted">Slop's Last Cry plays your own copy of <i>Banshee's Last Cry</i> (iOS, 32-bit, Aksys).
+      It contains nothing from the game: this setup reads your <b>.ipa</b> file once and converts it.</p>
+    <div id="pc" hidden>
+      <div class="step"><b>1. Your game file</b>
+        <button id="pickIpa">Choose the .ipa…</button> <span id="ipaName" class="muted"></span></div>
+      <div class="step"><b>2. This folder</b>
+        <span class="muted">Choose the Slop's Last Cry folder (the one with <code>index.html</code> and <code>setup.html</code>). The converted files are written there.</span><br>
+        <button id="pickDir" style="margin-top:.4em">Choose the folder…</button> <span id="dirName" class="muted"></span></div>
+      <div class="step"><button id="run" disabled>Convert</button></div>
+    </div>
+    <div id="android" hidden>
+      <div class="step" id="obbInfo"></div>
+      <div class="step"><button id="pickAndroid">Choose the .ipa…</button></div>
+    </div>
+    <div id="unsupported" hidden class="bad">This browser can't run the setup. Use Google Chrome or Microsoft Edge (version 103 or newer).</div>
+    <progress id="bar" max="1" value="0" hidden></progress>
+    <div id="status"></div>
+    <div id="warn"></div>
+  </div>
+</main>
+<script src="setup/alac.js"></script>
+<script src="setup/convert.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const NATIVE = window.SLCNative || null;
+  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', done: 'Done' };
+  const warns = [];
+  function progress(m) {
+    if (m.warn) { warns.push(m.warn); $('#warn').textContent = 'Warnings:\n' + warns.join('\n'); return; }
+    $('#bar').hidden = false;
+    $('#bar').value = m.n ? m.i / m.n : 0;
+    $('#status').textContent = (LABELS[m.step] || m.step) + (m.n > 1 ? ' (' + m.i + ' of ' + m.n + ')' : '') + '…';
+  }
+  function fail(e) { $('#status').innerHTML = '<span class="bad">' + (e && e.message ? e.message : e) + '</span>'; console.error(e); }
+  const supported = typeof AudioEncoder !== 'undefined' && typeof DecompressionStream !== 'undefined' && typeof CompressionStream !== 'undefined';
+  if (!supported) { $('#unsupported').hidden = false; return; }
+
+  if (NATIVE) {
+    // ---------- Android: the app extracts the IPA/OBB natively, conversion runs here ----------
+    $('#android').hidden = false;
+    const found = NATIVE.findGame();
+    $('#obbInfo').innerHTML = found
+      ? 'Found your game file: <span class="ok">' + found.split('/').pop() + '</span><br><button id="useObb" style="margin-top:.4em">Use it</button>'
+      : '<span class="muted">To skip choosing the file, you can also copy your .ipa as <code>main.1.' + NATIVE.packageName() + '.obb</code> into <code>Android/obb/' + NATIVE.packageName() + '/</code>.</span>';
+    const fs = {
+      list: async (d) => JSON.parse(NATIVE.list(d)),
+      read: async (p) => { const r = await fetch(p.split('/').map(encodeURIComponent).join('/'), { cache: 'no-store' }); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; },
+      write: async (p, d) => {
+        if (typeof d === 'string') { NATIVE.writeText(p, d); return; }
+        const CH = 3 << 20;   // pass binary data in 3 MB base64 pieces
+        for (let o = 0, first = true; o < d.length || first; o += CH, first = false) {
+          const part = d.subarray(o, o + CH); let s = '';
+          for (let i = 0; i < part.length; i += 0x8000) s += String.fromCharCode.apply(null, part.subarray(i, i + 0x8000));
+          NATIVE.writeBase64(p, btoa(s), !first);
+        }
+      }
+    };
+    window.slcProgress = (i, n) => progress({ step: 'extracting', i, n });
+    window.slcExtracted = async (err) => {
+      if (err) return fail(err);
+      try {
+        await SLCConvert.convertGame(fs, progress);
+        NATIVE.setupDone();
+        $('#status').innerHTML = '<span class="ok">All set.</span>';
+        location.replace('index.html');
+      } catch (e) { fail(e); }
+    };
+    const start = (fromObb) => { $('#pickAndroid').disabled = true; const b = $('#useObb'); if (b) b.disabled = true; progress({ step: 'extracting', i: 0, n: 1 }); NATIVE.extract(!!fromObb); };
+    if ($('#useObb')) $('#useObb').onclick = () => start(true);
+    window.slcPicked = (ok) => { if (ok) start(false); };
+    $('#pickAndroid').onclick = () => NATIVE.pickGame();
+    return;
+  }
+
+  // ---------- PC (Chrome / Edge): write into the chosen folder ----------
+  if (!window.showDirectoryPicker) { $('#unsupported').hidden = false; return; }
+  $('#pc').hidden = false;
+  let ipa = null, dir = null;
+  const ready = () => { $('#run').disabled = !(ipa && dir); };
+  const input = document.createElement('input'); input.type = 'file'; input.accept = '.ipa,.obb,.zip';
+  input.onchange = () => { ipa = input.files[0] || null; $('#ipaName').textContent = ipa ? ipa.name : ''; ready(); };
+  $('#pickIpa').onclick = () => input.click();
+  $('#pickDir').onclick = async () => {
+    try {
+      const d = await window.showDirectoryPicker({ mode: 'readwrite', id: 'slops-last-cry' });
+      try { await d.getFileHandle('index.html'); } catch (e) { $('#dirName').innerHTML = '<span class="bad">That folder has no index.html. Choose the Slop\'s Last Cry folder.</span>'; return; }
+      dir = d; $('#dirName').textContent = d.name; ready();
+    } catch (e) { /* cancelled */ }
+  };
+  async function dirOf(path, create) {
+    let h = dir; const parts = path.split('/').filter(Boolean);
+    for (const p of parts) h = await h.getDirectoryHandle(p, { create });
+    return h;
+  }
+  const fs = {
+    list: async (d) => { const out = []; try { const h = await dirOf(d, false); for await (const [n, e] of h.entries()) if (e.kind === 'file') out.push(n); } catch (e) { } return out; },
+    read: async (p) => {
+      try { const i = p.lastIndexOf('/'); const h = await (await dirOf(p.slice(0, i + 1), false)).getFileHandle(p.slice(i + 1)); return new Uint8Array(await (await h.getFile()).arrayBuffer()); }
+      catch (e) { return null; }
+    },
+    write: async (p, data) => {
+      const i = p.lastIndexOf('/'); const h = await (await dirOf(p.slice(0, i + 1), true)).getFileHandle(p.slice(i + 1), { create: true });
+      const w = await h.createWritable(); await w.write(data); await w.close();
+    }
+  };
+  $('#run').onclick = async () => {
+    $('#run').disabled = $('#pickIpa').disabled = $('#pickDir').disabled = true;
+    try {
+      await SLCConvert.extractIpa(ipa, fs, progress);
+      await SLCConvert.convertGame(fs, progress);
+      $('#status').innerHTML = '<span class="ok">All set.</span> Open <b>index.html</b> in this folder to play (or <a href="index.html">play now</a>).';
+      $('#bar').value = 1;
+    } catch (e) { fail(e); $('#run').disabled = $('#pickIpa').disabled = $('#pickDir').disabled = false; }
+  };
+})();
+</script>
+</body>
+</html>

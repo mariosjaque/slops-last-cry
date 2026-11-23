@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slop's Last Cry</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="engine/engine.css">
+</head>
+<body>
+<div id="app">
+  <div id="backdrop"></div>
+  <div id="stage">
+    <div id="bgwrap">
+      <div class="bg" id="bgA"></div>
+      <div class="bg" id="bgB"></div>
+      <video id="movie" playsinline></video>
+    </div>
+    <div id="dim"></div>
+    <div id="bright"></div>
+    <div id="textlayer"></div>
+    <div id="wipe"></div>
+    <button id="secretbtn" title="??? (S key)">???</button>
+    <div id="hud">
+      <div>
+        <button class="hudbtn" id="hudBack" style="display:none" title="Previous page (←)">&#8592; Back</button>
+      </div>
+      <div>
+        <button class="hudbtn" id="hudFull" title="Fullscreen (F)">&#x26F6;</button>
+        <button class="hudbtn" id="hudMenu" title="Menu (Esc)">&#9776; Menu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Title screen -->
+<div class="screen" id="title">
+  <div class="tstage">
+    <img class="logo" alt="Banshee's Last Cry">
+    <div class="menu">
+      <button data-act="new">From the beginning</button>
+      <button data-act="continue">From saved location</button>
+      <button data-act="settings">Settings</button>
+    </div>
+    <img class="copy" alt="">
+  </div>
+</div>
+
+<!-- Character names -->
+<div class="screen" id="names">
+  <div class="nstage">
+    <div class="nbox nhead">
+      <div class="ntitle">Welcome to the Snowflake Inn</div>
+      <div class="nrow"><span>Main guest name:</span><input type="text" id="nmMain" maxlength="16" readonly autocomplete="off" spellcheck="false" enterkeyhint="next"></div>
+      <div class="nrow"><span>Companion's name:</span><input type="text" id="nmSub" maxlength="16" readonly autocomplete="off" spellcheck="false" enterkeyhint="done"></div>
+    </div>
+    <div class="nbtns">
+      <button class="nbox" data-act="ok">Use these names</button>
+      <button class="nbox" data-act="change">Change names</button>
+      <button class="nbox" data-act="cancel">Return to Title Screen</button>
+    </div>
+    <div class="nbox nfoot">* Once decided, you won't be able to change names.<br>* Saved data will be automatically overwritten.</div>
+    <div class="nhelp"><div class="ogbody"></div></div>
+  </div>
+</div>
+
+<!-- Killer's name -->
+<div class="screen" id="killer">
+  <div class="kstage">
+    <div class="kbox">
+      <div class="ktitle">Killer's name</div>
+      <input type="text" id="killerName" maxlength="40" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done">
+      <div class="kbtns"><button data-act="ok" disabled>OK</button><button data-act="cancel">Cancel</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- In-game menu -->
+<div class="screen" id="toc">
+  <div class="tbox">
+    <div class="ttop">
+      <button data-act="share" title="Share"><img src="engine/img/pj_share.png" alt="Share"></button>
+      <button data-act="settings" title="Settings"><img src="engine/img/pj_option.png" alt="Settings"></button>
+      <button data-act="title" title="Return to Title Screen"><img src="engine/img/pj_backtitle.png" alt="Return to Title Screen"></button>
+    </div>
+    <div class="tband t1"><span class="big">Table of Contents</span><span class="small">(Jump to Chapter Start)</span></div>
+    <div class="tband t2"><span class="chap"></span></div>
+    <div class="tjump">
+      <div class="tcard"><div class="pic"></div><img class="frame" src="engine/img/pj_frame_01.png" alt=""></div>
+      <img class="tarrow l" src="engine/img/pj_swipe.png" alt="">
+      <img class="tarrow r" src="engine/img/pj_swipe.png" alt="">
+      <div class="tthumbs"><div class="track"></div><img class="tsel" src="engine/img/pj_frame_02.png" alt=""></div>
+    </div>
+    <div class="tbot">
+      <button data-act="save" title="Save"><img src="engine/img/pj_save.png" alt="Save"></button>
+      <button data-act="return" title="Return"><img src="engine/img/pj_back.png" alt="Return"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Table of contents -->
+<div class="screen overlay" id="chapters">
+  <div class="panel">
+    <h2>Table of Contents</h2>
+    <p class="muted" id="chapCount"></p>
+    <div class="list" id="chapList"></div>
+    <div class="row"><button class="btn ghost" data-act="close">Return</button></div>
+  </div>
+</div>
+
+<!-- Settings (iOS grouped table, like the original app) -->
+<div class="screen overlay" id="cfg"><div class="cfgwrap"></div></div>
+
+<!-- Help -->
+<div class="screen overlay" id="help">
+  <div class="panel">
+    <h2>Keyboard Controls</h2>
+    <p>The story changes depending on the choices you make.</p>
+    <p><span class="kbd">Click</span> / <span class="kbd">Space</span> / <span class="kbd">Enter</span> / <span class="kbd">↓</span> scroll the text and, at the end of a page, turn to the next one. The mouse wheel also scrolls.</p>
+    <p><span class="kbd">1</span> to <span class="kbd">4</span> pick a choice. <span class="kbd">←</span>, <span class="kbd">Backspace</span>, a right click or the Back button go back one page.</p>
+    <p><span class="kbd">Esc</span> or the Menu button open the Table of Contents (jump to the start of a chapter, save, settings). <span class="kbd">F</span> toggles fullscreen.</p>
+    <p class="muted">Progress is saved automatically on every page. To load, use "From saved location" on the title screen. Choices you have already taken are shown in grey.</p>
+    <div class="row"><button class="btn" data-act="close">Close</button></div>
+  </div>
+</div>
+
+<!-- Original How to Play pages (touch devices) -->
+<div class="screen" id="oghelp"><div class="ogbody"></div></div>
+
+<div id="toast"></div>
+<div id="startcover">Banshee's Last Cry<small>Click to start</small></div>
+
+<script src="engine/data.js"></script>
+<script src="engine/engine.js"></script>
+</body>
+</html>

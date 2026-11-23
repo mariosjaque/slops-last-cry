@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The web version (../../web) is the app's UI. It is copied into the APK's assets as www/.
+// It contains only the port's own code and freely licensed fonts, never game files.
+abstract class CopyWebTask extends DefaultTask {
+    @InputDirectory abstract DirectoryProperty getSource()
+    @OutputDirectory abstract DirectoryProperty getOutput()
+
+    @TaskAction
+    void run() {
+        File src = source.get().asFile
+        File dest = new File(output.get().asFile, 'www')
+        project.delete(output.get().asFile)
+        project.copy { spec ->
+            spec.from(src)
+            spec.into(dest)
+        }
+    }
+}
+
+def copyWeb = tasks.register('copyWeb', CopyWebTask) {
+    source = rootProject.layout.projectDirectory.dir('../web')
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets.addGeneratedSourceDirectory(copyWeb) { it.output }
+    }
+}
+
+android {
+    namespace 'xyz.mariosjaque.slopslastcry'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'xyz.mariosjaque.slopslastcry'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        // A throwaway key committed to the repo so every build can be installed over the previous one.
+        // This app is for personal use only, so the key is not secret.
+        release {
+            storeFile file('slc.keystore')
+            storePassword 'slopslastcry'
+            keyAlias 'slc'
+            keyPassword 'slopslastcry'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+}

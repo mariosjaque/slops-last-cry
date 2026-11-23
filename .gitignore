@@ -1,0 +1,14 @@
+# Game files must never be committed: they are generated on the user's device from their own copy.
+*.ipa
+*.obb
+web/ink-en.app/
+web/engine/data.js
+web/engine/img/
+web/engine/audio/
+
+# Build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.DS_Store

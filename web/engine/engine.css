@@ -1,0 +1,351 @@
+/* Bundled serif used where Apple's Marion is missing (SIL Open Font License, see fonts/LibreBaskerville-OFL.txt) */
+@font-face { font-family: 'Libre Baskerville Port'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/LibreBaskerville-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Libre Baskerville Port'; font-style: italic; font-weight: 400; font-display: swap; src: url(fonts/LibreBaskerville-400-italic.woff2) format('woff2'); }
+@font-face { font-family: 'Libre Baskerville Port'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/LibreBaskerville-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Libre Baskerville Port'; font-style: italic; font-weight: 700; font-display: swap; src: url(fonts/LibreBaskerville-700-italic.woff2) format('woff2'); }
+/* Local engine for Banshee's Last Cry (browser reimplementation) */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; background: #000; color: #eee; overflow: hidden;
+  font-family: Georgia, "Times New Roman", serif;
+}
+#app { position: fixed; inset: 0; }
+#backdrop {
+  position: absolute; inset: -40px; background: #000 center/cover no-repeat;
+  filter: blur(28px) brightness(0.35); transition: background-image .6s;
+}
+#stage {
+  position: absolute; top: 0; bottom: 0; left: 50%;
+  height: 100vh; height: 100dvh; width: min(100vw, 75vh); width: min(100vw, 75dvh); transform: translateX(-50%);
+  overflow: hidden; background: #000;
+}
+#stage.shake { animation: shake .45s linear; }
+@keyframes shake {
+  0%,100% { transform: translateX(-50%); }
+  20% { transform: translate(calc(-50% - 9px), 3px); }
+  40% { transform: translate(calc(-50% + 8px), -4px); }
+  60% { transform: translate(calc(-50% - 6px), 2px); }
+  80% { transform: translate(calc(-50% + 5px), -2px); }
+}
+#bgwrap { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform; }
+.bg { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity .6s; }
+.bg.on { opacity: 1; }
+#movie { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
+#movie.on { display: block; }
+#dim { position: absolute; inset: 0; background: #000; pointer-events: none; }
+#bright { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+#wipe { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; pointer-events: none; }
+#textlayer { position: absolute; inset: 0; }
+#textlayer iframe {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+  background: transparent; opacity: 0; transition: opacity .35s;
+}
+#textlayer iframe.on { opacity: 1; }
+
+/* HUD */
+#hud { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between;
+  padding: 8px; pointer-events: none; opacity: 0; transition: opacity .3s; z-index: 5; }
+#stage:hover #hud, #hud.show { opacity: 1; }
+#stage.busy #hud { opacity: 0 !important; pointer-events: none; }
+#stage.busy #hud button { pointer-events: none; }
+/* Touch: no hover, so keep a discreet menu button visible */
+/* Touch screens use the original gestures (edges, two-finger tap), so the on-screen buttons are hidden. */
+html.touch #hud { display: none; }
+#hud button { pointer-events: auto; }
+.hudbtn {
+  background: rgba(10,14,24,.65); color: #ddd; border: 1px solid rgba(255,255,255,.18);
+  border-radius: 8px; padding: 6px 10px; font: 13px/1 system-ui, sans-serif; cursor: pointer;
+}
+.hudbtn:hover { background: rgba(40,50,74,.9); color: #fff; }
+/* Stands in for shaking the phone where the device cannot report motion (PC). */
+#secretbtn { position: absolute; left: 50%; bottom: 7%; z-index: 6; display: none; transform: translateX(-50%);
+  padding: 9px 26px; border-radius: 22px; border: 1px solid rgba(255,255,255,.55); background: rgba(10,10,14,.72);
+  color: #fff; font: 15px/1 Marion, "Libre Baskerville Port", Georgia, serif; letter-spacing: .25em; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,.6); animation: secretIn .5s ease-out both, secretPulse 1.6s ease-in-out .5s infinite; }
+#secretbtn.on { display: block; }
+#secretbtn:hover { background: rgba(40,40,50,.85); }
+@keyframes secretIn { from { opacity: 0; transform: translate(-50%, 10px); } }
+@keyframes secretPulse { 50% { box-shadow: 0 0 14px rgba(255,255,255,.35); } }
+
+/* Screens and dialogs */
+.screen { position: fixed; inset: 0; display: none; z-index: 20; }
+.screen.on { display: flex; }
+.overlay { background: rgba(0,0,0,.72); align-items: center; justify-content: center; }
+.panel {
+  width: min(92vw, 520px); max-height: 88vh; max-height: 88dvh; overflow: auto; background: rgba(14,18,30,.96);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 22px 24px;
+  font: 15px/1.5 system-ui, "Segoe UI", sans-serif; color: #e8e8ee; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+}
+.panel h2 { margin: 0 0 14px; font: 600 20px/1.2 Georgia, serif; letter-spacing: .02em; }
+.panel h3 { margin: 18px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #9aa3b8; }
+.panel label { display: block; margin: 10px 0 4px; color: #c9cede; }
+.panel input[type=text] {
+  width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid #3a4560; background: #0b0f1a; color: #fff; font-size: 16px;
+}
+.panel input[type=range] { width: 100%; }
+.panel select { width: 100%; padding: 7px; border-radius: 8px; background: #0b0f1a; color: #fff; border: 1px solid #3a4560; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.btn {
+  flex: 1; min-width: 120px; padding: 10px 14px; border-radius: 9px; border: 1px solid #44507a;
+  background: #27324a; color: #fff; cursor: pointer; font: 15px system-ui, sans-serif;
+}
+.btn:hover { background: #34436a; }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .4; cursor: default; }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.list .item { text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid #333c58; background: #151b2c; color: #ddd; cursor: pointer; font: 14px system-ui, sans-serif; }
+.list .item[hidden] { display: none; }
+.list .item:hover { background: #222b45; color: #fff; }
+.muted { color: #8d95aa; font-size: 13px; }
+.kbd { font-family: ui-monospace, Consolas, monospace; background: #222a40; border-radius: 4px; padding: 1px 6px; }
+
+/* Title screen */
+#title { flex-direction: column; align-items: center; justify-content: flex-end; background: #000 center/cover no-repeat; }
+#title .tstage { position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100vw, 75vh); width: min(100vw, 75dvh);
+  background: center/cover no-repeat; display: flex; flex-direction: column; align-items: center; }
+/* The original centres the logo 64 pt above the middle of a 568 pt screen (about 39% down). */
+#title .logo { position: absolute; left: 0; top: 39%; transform: translateY(-50%); width: 100%; filter: drop-shadow(0 4px 18px rgba(0,0,0,.8)); }
+#title .menu { margin-top: auto; margin-bottom: 9vh; display: flex; flex-direction: column; gap: 10px; width: 62%; }
+#title .menu button[hidden] { display: none; }
+html.touch #title .menu { width: 78%; }
+@media (max-width: 480px) { #title .menu { width: 80%; } #title .menu button { font-size: 16px; padding: 11px; } }
+#title .menu button {
+  padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(10,14,24,.62);
+  color: #f2f2f6; font: 17px Georgia, serif; letter-spacing: .03em; cursor: pointer; backdrop-filter: blur(3px);
+}
+#title .menu button:hover { background: rgba(39,50,74,.85); }
+#title .menu button:disabled { opacity: .35; cursor: default; }
+#title .copy { position: absolute; bottom: 2vh; width: 70%; opacity: .8; }
+#title .note { position: absolute; bottom: 5.5vh; font: 12px system-ui, sans-serif; color: rgba(255,255,255,.55); }
+
+#toast { position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%); background: rgba(10,14,24,.9);
+  color: #fff; padding: 9px 16px; border-radius: 9px; font: 14px system-ui, sans-serif; z-index: 50;
+  opacity: 0; transition: opacity .3s; pointer-events: none; }
+#toast.on { opacity: 1; }
+#startcover { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: #000; color: #ccc; font: 18px Georgia, serif; cursor: pointer; flex-direction: column; gap: 10px; }
+#startcover small { font: 13px system-ui, sans-serif; color: #777; }
+
+#branchicon { position: absolute; top: 12px; right: 12px; width: 15%; max-width: 110px; z-index: 4; pointer-events: none;
+  opacity: 0; transition: opacity .4s; filter: drop-shadow(0 2px 5px rgba(0,0,0,.7)); }
+#branchicon.on { opacity: 1; }
+
+@media (max-width: 480px) {
+  .panel { padding: 18px 16px; }
+  .btn { min-width: 0; }
+}
+
+/* Original How to Play pages */
+#oghelp { background: #000; color: #eee; overflow-y: auto; display: none; -webkit-overflow-scrolling: touch; }
+#oghelp.on { display: block; }
+#oghelp .ogbody { max-width: 640px; margin: 0 auto; padding: 10px 20px 40px; font: 125% Georgia, serif; text-align: justify; }
+#oghelp img { display: block; margin: 0 auto; max-width: 60%; }
+
+/* ---------- Settings: same screens and wording as the original app, styled to match the game ---------- */
+#cfg { z-index: 25; align-items: stretch; justify-content: center; background: rgba(0,0,0,.7); }
+#oghelp { z-index: 30; }
+#help { z-index: 31; }
+#cfg .cfgwrap { position: relative; width: min(100vw, 75dvh); height: 100dvh; overflow: hidden;
+  font-family: Georgia, "Palatino Linotype", "Times New Roman", serif; color: #e8e4dc; }
+#cfg .cfgpage { position: absolute; inset: 0; display: flex; flex-direction: column; background: #0c0c0d;
+  transition: transform .28s ease, opacity .28s ease; }
+#cfg .cfgpage.in { transform: translateX(8%); opacity: 0; pointer-events: none; }
+#cfg .cfgpage.under { opacity: 0; pointer-events: none; }
+#cfg .cfgpage.now { transition: none; }
+#cfg .cfgnav { flex: none; position: relative; display: flex; align-items: flex-end; min-height: 64px;
+  padding: env(safe-area-inset-top) 22px 12px; border-bottom: 1px solid #2c2a27; }
+#cfg .cfgtitle { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-size: 17px;
+  letter-spacing: .14em; text-transform: uppercase; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 28%; }
+#cfg .cfgback { position: relative; z-index: 1; background: none; border: 0; padding: 4px 0; color: #9a948a; font: inherit; font-size: 14px;
+  cursor: pointer; max-width: 28%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+#cfg .cfgback:hover, #cfg .cfgback:focus-visible { color: #fff; outline: none; }
+#cfg .cfgbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 22px 40px; }
+#cfg .cfgsec { margin-top: 28px; }
+#cfg .cfghead { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #a8372c; margin-bottom: 4px; }
+#cfg .cfgfoot { margin-top: 8px; font-size: 13px; font-style: italic; color: #77726a; line-height: 1.45; }
+#cfg .cfgrow { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 0;
+  background: none; border: 0; border-bottom: 1px solid #1f1e1c; font: inherit; font-size: 16px; color: inherit; text-align: left; }
+#cfg .cfgrow.tap { cursor: pointer; }
+#cfg .cfgrow.tap:hover .cfglabel, #cfg .cfgrow.tap:focus-visible .cfglabel { color: #fff; }
+#cfg .cfgrow.tap:focus-visible { outline: none; }
+#cfg .cfgrow.tap:active { background: #151413; }
+#cfg .cfgrow.danger .cfglabel { color: #b9473b; }
+#cfg .cfglabel { flex: 1; padding: 12px 0; }
+#cfg .cfgdetail { color: #8d877d; font-style: italic; }
+#cfg .cfgchev { color: #55514b; }
+#cfg .cfgcheck { color: #c03b2f; font-size: 15px; }
+#cfg .cfgtoggle { background: none; border: 1px solid #3a3733; color: #77726a; font: inherit; font-size: 12px; letter-spacing: .14em;
+  text-transform: uppercase; min-width: 58px; padding: 5px 0; cursor: pointer; }
+#cfg .cfgtoggle.on { border-color: #8a2a22; color: #e8e4dc; background: #2a0f0c; }
+#cfg .cfgrow.slider .cfglabel { flex: 0 0 40%; }
+#cfg .cfgval { flex: 0 0 2.2em; text-align: right; color: #8d877d; font-variant-numeric: tabular-nums; font-size: 14px; }
+#cfg input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 28px; background: transparent; margin: 0; --p: 50%; cursor: pointer; }
+#cfg input[type=range]::-webkit-slider-runnable-track { height: 1px; background: linear-gradient(to right, #c03b2f var(--p), #3a3733 var(--p)); }
+#cfg input[type=range]::-moz-range-track { height: 1px; background: #3a3733; }
+#cfg input[type=range]::-moz-range-progress { height: 1px; background: #c03b2f; }
+#cfg input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; margin-top: -5px; background: #e8e4dc; transform: rotate(45deg); }
+#cfg input[type=range]::-moz-range-thumb { width: 9px; height: 9px; border: 0; border-radius: 0; background: #e8e4dc; transform: rotate(45deg); }
+#cfg .cfgpreview { position: relative; aspect-ratio: 300 / 118; overflow: hidden; background: #000; margin-top: 8px; border: 1px solid #2c2a27; }
+#cfg .cfgpreview .pvbg { position: absolute; inset: 0; background: center top / cover no-repeat; }
+#cfg .cfgpreview .pvdim { position: absolute; inset: 0; background: #000; }
+#cfg .cfgpreview .pvtext { position: absolute; inset: 0; padding: 2% 3%; line-height: 1.3; overflow: hidden; }
+#cfg .cfgpreview .pvtext p { margin: 0 0 1em; }
+#cfg .savecell { min-height: 104px; gap: 16px; padding: 10px 0; }
+#cfg .savecell .thumb { width: 64px; height: 84px; flex: none; background: #1a1918 center / cover no-repeat; border: 1px solid #2c2a27; }
+#cfg .savecell .savetext { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#cfg .savecell .d { font-size: 12px; color: #77726a; font-variant-numeric: tabular-nums; }
+#cfg .savecell .t { font-size: 16px; }
+#cfg .savecell .c { font-size: 13px; font-style: italic; color: #8d877d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cfg .cfgweb { padding-top: 10px; font-size: 14px; line-height: 1.55; color: #bdb7ad; }
+#cfg .cfgweb h1, #cfg .cfgweb h2 { font-weight: normal; letter-spacing: .1em; color: #e8e4dc; }
+#cfg .cfgsheet { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.8); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; animation: cfgfade .18s; }
+@keyframes cfgfade { from { opacity: 0; } }
+#cfg .cfgsheet .box { width: min(100%, 340px); background: #0c0c0d; border: 1px solid #3a3733; }
+#cfg .cfgsheet .msg { padding: 16px 22px 14px; font-size: 15px; line-height: 1.5; text-align: center; white-space: pre-line; }
+#cfg .cfgsheet button { display: block; width: 100%; padding: 13px 22px; border: 0; background: none; font: inherit; font-size: 16px; color: #e8e4dc; cursor: pointer; }
+#cfg .cfgsheet .box > * + button { border-top: 1px solid #1f1e1c; }
+#cfg .cfgsheet button:hover { background: #151413; }
+#cfg .cfgsheet .cancel { width: auto; color: #8d877d; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; }
+
+/* Startup logos */
+#logos { position: fixed; inset: 0; z-index: 61; display: flex; align-items: center; justify-content: center; }
+
+/* ---------- Name screen (original NameInputVC) ---------- */
+#names { z-index: 22; background: #000; justify-content: center; }
+#names .nstage { position: relative; width: min(100vw, 75dvh); height: 100dvh; overflow: hidden;
+  background: #000 center / cover no-repeat; display: flex; flex-direction: column; align-items: center;
+  font-family: Marion, "Libre Baskerville Port", Georgia, "Times New Roman", serif; color: #fff; transition: opacity 1s linear; }
+#names.leaving .nstage { opacity: 0; }
+/* setCornerView: diagonal navy-to-blue gradient, 6 pt corners, 1 pt black border */
+#names .nbox { background: linear-gradient(135deg, #111c3c 0%, #2d3c70 55%, #56679f 100%); border: 1px solid #000; border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.45); }
+#names .nhead { width: 94%; margin-top: 3%; padding: 3.5% 4% 4%; box-sizing: border-box; }
+#names .ntitle { text-align: center; font-size: clamp(15px, 4.6vw, 24px); margin-bottom: 7%; }
+#names .nrow { display: flex; align-items: center; font-size: clamp(12px, 3.4vw, 17px); margin-top: 5%; }
+#names .nrow span { flex: 0 0 auto; }
+#names .nrow input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; padding: 2px 0;
+  font: inherit; font-size: clamp(14px, 4.2vw, 21px); color: #e8a6ff; text-align: center; caret-color: #2d7bff; }
+#names .nrow input[readonly] { cursor: default; }
+#names.editing .nrow input { color: #fff; }
+#names .nbtns { width: 72%; display: flex; flex-direction: column; gap: 5%; margin-top: 9%; flex: 0 0 auto; height: 34%; }
+#names .nbtns button { flex: 1; color: #fff; font: 700 clamp(14px, 4.4vw, 22px) Marion, "Libre Baskerville Port", Georgia, serif;
+  cursor: pointer; max-height: 3.2em; }
+#names .nbtns button:active { filter: brightness(1.3); }
+#names .nfoot { position: absolute; left: 3%; right: 3%; bottom: 3%; padding: 3% 3.5%; color: #ff2a2a;
+  font-size: clamp(12px, 3.4vw, 17px); line-height: 1.45; }
+/* How to Play introduction shown after confirming the names (createHelpView: 80% black, inset 10%) */
+#names .nhelp { position: absolute; left: 10%; top: 10%; right: 10%; bottom: 10%; background: rgba(0,0,0,.8); overflow-y: auto;
+  opacity: 0; pointer-events: none; transition: opacity .5s linear; cursor: pointer; }
+#names.helpon .nhelp { opacity: 1; pointer-events: auto; }
+#names .nhelp .ogbody { padding: 4% 6%; font: clamp(14px, 4.3vw, 21px)/1.35 Georgia, serif; text-align: justify; color: #eee; }
+#names .nhelp img { display: block; margin: 0 auto; max-width: 80%; }
+
+/* ---------- Table of Contents (original page jump screen, laid out on a 320 x 480 point grid) ---------- */
+#toc { z-index: 21; background: #000; align-items: center; justify-content: center; }
+#toc .tbox { position: relative; width: min(100vw, 66.667dvh); aspect-ratio: 2 / 3; container-type: inline-size;
+  background: #222 center / cover no-repeat; overflow: hidden; font-family: Marion, "Libre Baskerville Port", Georgia, serif; color: #fff; }
+#toc button { position: absolute; padding: 0; border: 0; background: none; cursor: pointer; }
+#toc button img { display: block; width: 100%; height: 100%; }
+#toc button:active { filter: brightness(.8); }
+#toc button[hidden] { display: none; }
+#toc .ttop button { top: 0.83%; width: 33.28cqw; height: 6.35%; }
+#toc .ttop [data-act=share] { left: 0.6cqw; }
+#toc .ttop [data-act=settings] { left: 33.36cqw; }
+#toc .ttop [data-act=title] { left: 66.12cqw; }
+#toc .tband { position: absolute; left: 0; right: 0; height: 6.67%; background: url(img/pj_title_bg.png) center / 100% 100% no-repeat;
+  display: flex; align-items: center; justify-content: center; gap: .6cqw; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+#toc .t1 { top: 8.3%; }
+#toc .t2 { top: 14.2%; }
+#toc .t1 .big { font-size: 5.6cqw; }
+#toc .t1 .small { font-size: 2.6cqw; margin-top: 1.4cqw; }
+#toc .t2 .chap { font-size: 5cqw; }
+#toc .tjump { position: absolute; left: 0; right: 0; top: 22%; bottom: 8%; touch-action: pan-y; }
+#toc .tcard { position: absolute; left: 25.6cqw; width: 48.8cqw; top: 3.6%; height: 54.5%; cursor: pointer; }
+#toc .tcard .pic { position: absolute; left: 8%; right: 8%; top: 5.5%; bottom: 5.5%; border-radius: 3%; background: #000 center / cover no-repeat; }
+#toc .tcard .frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#toc .tarrow { position: absolute; top: 8%; width: 10cqw; height: 46%; cursor: pointer; opacity: .9; }
+#toc .tarrow.l { left: 2cqw; }
+#toc .tarrow.r { right: 2cqw; transform: scaleX(-1); }
+#toc .tthumbs { position: absolute; left: 0; right: 0; top: 63%; height: 27%; background: url(img/pj_thumbnail_bg.png) center / 100% 100% no-repeat; overflow: hidden; }
+#toc .track { position: absolute; left: 50%; top: 50%; height: 24cqw; margin-top: -12cqw; display: flex; }
+#toc .th { width: 18cqw; height: 100%; background: #000 center / cover no-repeat; cursor: pointer; flex: none; }
+#toc .tsel { position: absolute; left: 50%; top: 50%; width: 28cqw; height: 33.5cqw; transform: translate(-50%, -50%); pointer-events: none; }
+#toc .tbot button { bottom: 0.9%; width: 33.28cqw; height: 6.35%; }
+#toc .tbot [data-act=save] { left: 0.6cqw; }
+#toc .tbot [data-act=return] { right: 0.6cqw; }
+/* Save Data: header message shown when saving */
+#cfg .cfghint { margin: 22px 0 -10px; text-align: center; font-size: 14px; color: #8d877d; white-space: pre-line; }
+#cfg .savecell:not(.tap) { cursor: default; }
+
+/* ---------- Killer's name (original KMPageNameInputView) ---------- */
+#killer { z-index: 23; background: rgba(0,0,0,.35); justify-content: center; align-items: flex-start; transition: opacity .5s linear; }
+#killer.closing { opacity: 0; }
+#killer .kstage { position: relative; width: min(100vw, 75dvh); height: 100dvh; container-type: inline-size; }
+#killer .kbox { position: absolute; left: 7.5cqw; right: 7.5cqw; top: 1.5cqw; padding: 5cqw 7cqw 13cqw;
+  background: linear-gradient(160deg, #4677d8 0%, #2f5fc4 45%, #2554b5 100%); border: 1px solid #0d2a66; border-radius: 2.5cqw;
+  box-shadow: 0 3px 12px rgba(0,0,0,.55); font-family: Marion, "Libre Baskerville Port", Georgia, serif; }
+#killer .ktitle { text-align: center; color: #fff; font-size: 6.3cqw; padding: 2cqw 0; border-radius: 2cqw; border: 1px solid #10306e;
+  background: linear-gradient(#2c5cc0, #2152b3); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+#killer input { display: block; width: 100%; box-sizing: border-box; margin-top: 6.5cqw; padding: 1.4cqw 2cqw; border: 0; border-radius: 1.6cqw;
+  background: #fff; color: #000; font: 6.3cqw Marion, "Libre Baskerville Port", Georgia, serif; outline: none; caret-color: #2d6bff; }
+#killer .kbtns { position: absolute; left: 7cqw; right: 7cqw; bottom: 3.5cqw; display: flex; justify-content: space-between; }
+#killer .kbtns button { background: none; border: 0; padding: 1cqw 3cqw; font: 4.6cqw "Helvetica Neue", Helvetica, Arial, sans-serif; color: #5aa0ff; cursor: pointer; }
+#killer .kbtns button:disabled { color: transparent; cursor: default; }
+#killer .kbtns button:active { opacity: .5; }
+
+/* iPad-style previews under Gore Level and Page Direction */
+#cfg .cfgpvimg { position: relative; aspect-ratio: 3 / 4; max-height: 46vh; margin: 8px auto 0; border: 1px solid #2c2a27; background: #000 center / cover no-repeat; overflow: hidden; }
+#cfg .cfgpvimg.slide .a, #cfg .cfgpvimg.slide .b { position: absolute; inset: 0; background: center / cover no-repeat; }
+#cfg .cfgpvimg.slide .b { filter: brightness(.55); }
+#cfg .cfgpvimg.toright .a { animation: pvOutR 2.4s ease-in-out infinite; }
+#cfg .cfgpvimg.toright .b { animation: pvInR 2.4s ease-in-out infinite; }
+#cfg .cfgpvimg.toleft .a { animation: pvOutL 2.4s ease-in-out infinite; }
+#cfg .cfgpvimg.toleft .b { animation: pvInL 2.4s ease-in-out infinite; }
+@keyframes pvOutR { 0%, 35% { transform: translateX(0); } 75%, 100% { transform: translateX(100%); } }
+@keyframes pvInR { 0%, 35% { transform: translateX(-100%); } 75%, 100% { transform: translateX(0); } }
+@keyframes pvOutL { 0%, 35% { transform: translateX(0); } 75%, 100% { transform: translateX(-100%); } }
+@keyframes pvInL { 0%, 35% { transform: translateX(100%); } 75%, 100% { transform: translateX(0); } }
+
+/* ---------- Wide screens: original iPad layout ---------- */
+/* Title: buttons in one translucent bar near the bottom */
+html.wide #title .logo { top: 37%; width: 84%; left: 8%; }
+html.wide #title .menu { flex-direction: row; justify-content: space-around; width: 100%; margin-bottom: 11%; gap: 0;
+  padding: 1.6% 4%; box-sizing: border-box; background: rgba(0,0,0,.55); border-top: 1px solid rgba(255,255,255,.12); border-bottom: 1px solid rgba(255,255,255,.12); }
+html.wide #title .menu button { width: auto; min-width: 22%; padding: 1.2% 3%; font-size: max(13px, 1.9vh); }
+/* Settings: list on the left, selected page on the right */
+#cfg .cfgwrap.split { display: flex; }
+#cfg .cfgwrap.split .cfgleft { position: relative; flex: 0 0 38%; border-right: 1px solid #2c2a27; }
+#cfg .cfgwrap.split .cfgright { position: relative; flex: 1; overflow: hidden; }
+#cfg .cfgwrap.split .cfgleft .cfgtitle { padding: 0 6%; }
+#cfg .cfgwrap.split .cfgleft .cfgback { max-width: none; }
+#cfg .cfgwrap.split .cfgleft .cfgnav { justify-content: flex-end; }
+#cfg .cfgwrap.split .cfgleft .cfgtitle { text-align: left; left: 22px; right: auto; padding: 0; }
+#cfg .cfgwrap.split .cfgleft .cfgbody, #cfg .cfgwrap.split .cfgright .cfgbody { padding: 0 18px 30px; }
+#cfg .cfgwrap.split .cfgrow { font-size: 15px; }
+#cfg .cfgwrap.split .cfgrow.sel .cfglabel { color: #fff; }
+#cfg .cfgwrap.split .cfgrow.sel { box-shadow: inset 3px 0 0 #a8372c; padding-left: 10px; }
+/* Taller previews, as on iPad */
+#cfg .cfgpreview.tall, #cfg .cfgpvimg.tall { aspect-ratio: 200 / 250; max-height: 58vh; width: auto; margin: 8px auto 0; }
+#cfg .cfgpreview.tall .pvbg { background-position: center; }
+#cfg .cfgpreview.tall .pvtext { padding: 6% 7%; line-height: 1.35; }
+#cfg .dirpv .pg { position: absolute; inset: 0; aspect-ratio: auto; margin: 0; border: 0; }
+
+/* Share dialog (used when the browser has no share sheet) */
+#toc .tshare { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; }
+#toc .tshare .box { width: 82%; background: linear-gradient(135deg, #111c3c, #2d3c70 55%, #56679f); border: 1px solid #000; border-radius: 6px; padding: 4cqw; box-shadow: 0 2px 10px rgba(0,0,0,.6); }
+#toc .tshare .h { text-align: center; font-size: 5.5cqw; margin-bottom: 3cqw; }
+#toc .tshare textarea { width: 100%; box-sizing: border-box; height: 22cqw; resize: none; border: 0; border-radius: 4px; padding: 2cqw; font: 4.2cqw Georgia, serif; color: #000; }
+#toc .tshare .b { display: flex; gap: 2cqw; margin-top: 3cqw; }
+#toc .tshare .b button { position: static; flex: 1; padding: 2.2cqw 0; border: 1px solid #000; border-radius: 4px; background: rgba(255,255,255,.12); color: #fff; font: 4cqw Georgia, serif; cursor: pointer; }
+
+/* PC How to Play: same blue box as the name screen and the share dialog */
+#help .panel { background: linear-gradient(135deg, #111c3c 0%, #2d3c70 55%, #56679f 100%); border: 1px solid #000; border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.6); font: 15px/1.5 Marion, "Libre Baskerville Port", Georgia, serif; color: #fff; }
+#help .panel h2 { text-align: center; font-weight: normal; font-size: 22px; }
+#help .panel .muted { color: rgba(255,255,255,.7); }
+#help .kbd { background: rgba(0,0,0,.35); border: 1px solid rgba(0,0,0,.5); }
+#help .row .btn { border: 1px solid #000; border-radius: 4px; background: rgba(255,255,255,.12); color: #fff; font: 15px Georgia, serif; }
+#help .row .btn:hover { background: rgba(255,255,255,.22); }
+/* iPad How to Play inside Settings */
+#cfg .cfghelp { background: #000; color: #eee; padding: 14px 16px; font: 15px/1.45 Georgia, serif; text-align: justify; }
+#cfg .cfghelp img { display: block; margin: 10px auto; max-width: 60%; }
