@@ -1099,7 +1099,7 @@ html.touch #__next.deadend{display:block}
     [a, b].forEach(x => { x.classList.add('pg'); box.appendChild(x); });
     let showB = false;
     const place = (anim) => {
-      const sgn = S.dir === 'L' ? 1 : -1;   // "Right": the next page comes in from the left
+      const sgn = S.dir === 'L' ? -1 : 1;   // "Right": the next page comes in from the right
       [a, b].forEach(x => x.style.transition = anim ? 'transform .5s ease-in-out' : 'none');
       a.style.transform = showB ? 'translateX(' + (-sgn * 100) + '%)' : 'none';
       b.style.transform = showB ? 'none' : 'translateX(' + (sgn * 100) + '%)';
@@ -1116,7 +1116,7 @@ html.touch #__next.deadend{display:block}
     return el;
   }
   function previewDir() {
-    const el = document.createElement('div'); el.className = 'cfgpvimg slide ' + (S.dir === 'L' ? 'toleft' : 'toright');
+    const el = document.createElement('div'); el.className = 'cfgpvimg slide ' + (S.dir === 'L' ? 'toright' : 'toleft');
     const p = imgPath('ss_sky.jpg');
     el.innerHTML = '<div class="a"></div><div class="b"></div>';
     if (p) $$('div', el).forEach(d => { d.style.backgroundImage = 'url("' + url(p) + '")'; });
