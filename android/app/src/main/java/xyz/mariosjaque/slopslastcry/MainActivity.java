@@ -325,6 +325,11 @@ public class MainActivity extends Activity {
     class Bridge {
         @JavascriptInterface public String packageName() { return getPackageName(); }
 
+        @JavascriptInterface public boolean hasAccelerometer() {
+            android.hardware.SensorManager sm = (android.hardware.SensorManager) getSystemService(SENSOR_SERVICE);
+            return sm != null && sm.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null;
+        }
+
         @JavascriptInterface public boolean hasVibrator() {
             android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
             return v != null && v.hasVibrator();

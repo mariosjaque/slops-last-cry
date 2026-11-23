@@ -1634,7 +1634,9 @@ html.touch #__next.deadend{display:block}
     step();
   }
   // Shake detection for secret pages (the original turns the accelerometer on in pushSecretPage_).
-  let motionSeen = false, shakes = [], lastMag = 0;
+  // In the Android app the system says up front whether there is an accelerometer; in a browser a
+  // device counts as able to shake once it reports real motion data.
+  let motionSeen = !!(NATIVE && NATIVE.hasAccelerometer && NATIVE.hasAccelerometer()), shakes = [], lastMag = 0;
   window.addEventListener('devicemotion', ev => {
     const a = ev.accelerationIncludingGravity;
     if (!a || a.x == null) return;
