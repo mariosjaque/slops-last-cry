@@ -1647,7 +1647,9 @@ html.touch #__next.deadend{display:block}
     if (shakes.length >= 3) { shakes = []; choose(cur.secret); }
   });
   const cover = $('#startcover');
-  cover.addEventListener('click', () => {
+  // The Android app allows audio without a tap, so it starts straight away like the original.
+  if (NATIVE) { cover.remove(); toTitle(); }
+  else cover.addEventListener('click', () => {
     // iOS asks for permission before motion events are delivered; it must happen inside a tap.
     try { if (TOUCH && window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().catch(() => { }); } catch (e) { }
     cover.remove(); toTitle();
