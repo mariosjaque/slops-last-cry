@@ -1313,7 +1313,7 @@ html.touch #__next.deadend{display:block}
       // The autosave is only listed when loading; saving from the story only offers the slots.
       if (mode === 'load') {
         const auto = LS.get('auto', null);
-        const as = section(STR.ConfigSave_AutoSaveSectionHeader || 'Current saved data',
+        const as = section(WIDE ? (STR.ConfigSave_AutoSaveSectionHeader || 'Current saved data') : null,
           [saveCell('auto', auto, auto ? () => { Cfg.close(); loadState(auto); } : null)],
           STR.ConfigSave_AutoSaveSectionFooter || 'Auto Save');
         as.foot.classList.add('center');
@@ -1422,7 +1422,10 @@ html.touch #__next.deadend{display:block}
   function openToc() {
     const el = $('#toc');
     const bgs = ['a', 'b', 'c', 'd', 'e', 'f'].map(c => 'pagejump_bg_' + c + '@2x~ipad.jpg').filter(f => ROOT.has(f));
-    if (bgs.length) $('.tbox', el).style.backgroundImage = 'url("' + url(APP + bgs[Math.floor(Math.random() * bgs.length)]) + '")';
+    // Original KMPageJumpViewController viewDidLoad: one of the six backgrounds at random (rand() / RAND_MAX * 6)
+    // on every device, filling the screen height and centered. It goes behind the whole screen, so on
+    // tablets it fills the sides around the 2:3 layout too.
+    if (bgs.length) el.style.backgroundImage = 'url("' + url(APP + bgs[Math.floor(Math.random() * bgs.length)]) + '")';
     Toc.list = tocChapters();
     // start on the chapter being read now (it may not be the last one after jumping back)
     const pos = history.length;

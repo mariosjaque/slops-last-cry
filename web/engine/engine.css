@@ -243,9 +243,9 @@ html.touch #title .menu { width: 78%; }
 #names .nhelp img { display: block; margin: 0 auto; max-width: 80%; }
 
 /* ---------- Table of Contents (original page jump screen, laid out on a 320 x 480 point grid) ---------- */
-#toc { z-index: 21; background: #000; align-items: center; justify-content: center; }
+#toc { z-index: 21; background: #000 center / cover no-repeat; align-items: center; justify-content: center; }
 #toc .tbox { position: relative; width: min(100vw, 66.667dvh); aspect-ratio: 2 / 3; container-type: inline-size;
-  background: #222 center / cover no-repeat; overflow: hidden; font-family: Marion, "Libre Baskerville Port", Georgia, serif; color: #fff; }
+  background: transparent; overflow: hidden; font-family: Marion, "Libre Baskerville Port", Georgia, serif; color: #fff; }
 #toc button { position: absolute; padding: 0; border: 0; background: none; cursor: pointer; }
 #toc button img { display: block; width: 100%; height: 100%; }
 #toc button:active { filter: brightness(.8); }
