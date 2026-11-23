@@ -37,6 +37,12 @@ jobs:
         run: gradle -p android assembleRelease --stacktrace
       - name: Rename
         run: cp android/app/build/outputs/apk/release/app-release.apk slops-last-cry.apk
+      - name: Check the APK
+        run: |
+          BT=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+          $BT/apksigner verify --verbose slops-last-cry.apk
+          $BT/aapt2 dump badging slops-last-cry.apk | grep -E "package|sdkVersion|application-label"
+          unzip -l slops-last-cry.apk | grep -E "assets/www/(index|setup).html"
       - uses: actions/upload-artifact@v4
         with:
           name: slops-last-cry-android
