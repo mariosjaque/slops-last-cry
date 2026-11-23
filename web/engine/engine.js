@@ -1172,7 +1172,7 @@ html.touch #__next.deadend{display:block}
         item(STR.Config_Sound || 'Volume', go(pageVolume)),
         item(STR.Config_Save || 'Save Data', go(pageSave))
       ]));
-      body.appendChild(section(null, [
+      body.appendChild(section(STR.Config_Other || 'Other', [
         (() => { const r = item(STR.Config_HowToPlay || 'How to Play', pageHowToPlay); if (!TOUCH) r.onclick = () => openHelp(); return r; })(),
         item(STR.Config_ProductInfo || 'Product Infomation', go(pageProduct))
       ]));
