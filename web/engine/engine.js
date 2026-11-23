@@ -482,10 +482,11 @@ html.touch #__next.deadend{display:block}
       if (ev.target.closest && ev.target.closest('a,input,button')) return;
       if (!TOUCH) { advance(); return; }
       // Original controls (KMViewController tapProc): the outer 96 of 320 points on each side turn the page.
-      // With page direction "R" the left edge goes forward and the right edge goes back; "L" swaps them.
+      // With page direction "R" the right edge goes forward and the left edge goes back; "L" swaps them
+      // (checked against the original on an emulator).
       const x = ev.clientX, w = win.innerWidth, edge = w * 0.3;
       if (x < edge || x > w - edge) {
-        const fwd = (x < edge) === (S.dir !== 'L');
+        const fwd = (x > w - edge) === (S.dir !== 'L');
         if (fwd || !S.back) sideAdvance(); else back();
       } else tapAdvance();
     });
@@ -1083,7 +1084,7 @@ html.touch #__next.deadend{display:block}
       () => previewSection(textPreview('gerende2.jpg', 'preview00', 'tall'), true), true)();
   }
   function pageDirWide() {
-    return choicePage(STR.Config_PageDirection || 'Page Direction', 'dir', [['R', dirLabels.R], ['L', dirLabels.L]], null,
+    return choicePage(STR.Config_PageDirection || 'Page Direction', 'dir', [['L', dirLabels.L], ['R', dirLabels.R]], null,
       () => previewSection(previewDirPages()), true)();
   }
   function pageGoreWide() {
@@ -1132,7 +1133,7 @@ html.touch #__next.deadend{display:block}
       // Same rows and order as the original ConfigPhoneVC.
       body.appendChild(section(null, [
         row(STR.Config_DisplaySetup || 'Text/Brightness Setting', { chevron: true, onClick: () => Cfg.push(pageDisplay) }),
-        row(STR.Config_PageDirection || 'Page Direction', { detail: dirLabels[S.dir], chevron: true, onClick: () => Cfg.push(choicePage(STR.Config_PageDirection || 'Page Direction', 'dir', [['R', dirLabels.R], ['L', dirLabels.L]], null, IPAD_PREVIEWS && previewDir)) }),
+        row(STR.Config_PageDirection || 'Page Direction', { detail: dirLabels[S.dir], chevron: true, onClick: () => Cfg.push(choicePage(STR.Config_PageDirection || 'Page Direction', 'dir', [['L', dirLabels.L], ['R', dirLabels.R]], null, IPAD_PREVIEWS && previewDir)) }),
         row(STR.Config_Sound || 'Volume', { chevron: true, onClick: () => Cfg.push(pageVolume) }),
         row(STR.Config_Violence || 'Gore Level', { detail: goreLabels[S.gore], chevron: true, onClick: () => Cfg.push(choicePage(STR.Config_Violence || 'Gore Level', 'gore', goreLabels.map((l, i) => [i, l]), null, IPAD_PREVIEWS && previewGore)) }),
         S.saves ? row(STR.Config_Save || 'Save Data', { chevron: true, onClick: () => Cfg.push(() => pageSave()) }) : null
