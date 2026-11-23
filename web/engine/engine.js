@@ -61,7 +61,8 @@
   const S = Object.assign({}, DEF, LS.get('settings', {}));
   S.saves = true; S.toc = true; S.back = true;   // always on, as in the original game
   // Vibration effect: real vibration on touch devices that support it, screen shake otherwise.
-  const CAN_VIBRATE = TOUCH && typeof navigator.vibrate === 'function';
+  // The Android app asks the system whether there is a vibration motor (many tablets have none).
+  const CAN_VIBRATE = TOUCH && typeof navigator.vibrate === 'function' && (!NATIVE || !NATIVE.hasVibrator || NATIVE.hasVibrator());
   if (!S.fx || (S.fx === 'vibrate' && !CAN_VIBRATE)) S.fx = CAN_VIBRATE ? 'vibrate' : 'shake';
   const G = Object.assign({ flags: {}, visited: [], chapters: [] }, LS.get('global', {}));
   const visited = new Set(G.visited);

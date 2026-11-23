@@ -325,6 +325,11 @@ public class MainActivity extends Activity {
     class Bridge {
         @JavascriptInterface public String packageName() { return getPackageName(); }
 
+        @JavascriptInterface public boolean hasVibrator() {
+            android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+            return v != null && v.hasVibrator();
+        }
+
         @JavascriptInterface public String findGame() { File f = findObb(); return f != null ? f.getAbsolutePath() : ""; }
 
         @JavascriptInterface public void pickGame() {
