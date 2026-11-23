@@ -155,14 +155,16 @@ html.touch #title .menu { width: 78%; }
 #cfg .cfgnav { flex: none; position: relative; display: flex; align-items: flex-end; min-height: 64px;
   padding: env(safe-area-inset-top) 22px 12px; border-bottom: 1px solid #2c2a27; }
 #cfg .cfgtitle { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-size: 17px;
-  letter-spacing: .14em; text-transform: uppercase; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 28%; }
+  letter-spacing: .14em; text-transform: uppercase; pointer-events: none; white-space: nowrap; overflow: hidden; padding: 0 28%; }
 #cfg .cfgback { position: relative; z-index: 1; background: none; border: 0; padding: 4px 0; color: #9a948a; font: inherit; font-size: 14px;
-  cursor: pointer; max-width: 28%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  cursor: pointer; white-space: nowrap; text-align: left; }
+#cfg .cfgback.right { margin-left: auto; text-align: right; }
 #cfg .cfgback:hover, #cfg .cfgback:focus-visible { color: #fff; outline: none; }
 #cfg .cfgbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 22px 40px; }
 #cfg .cfgsec { margin-top: 28px; }
 #cfg .cfghead { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #a8372c; margin-bottom: 4px; }
 #cfg .cfgfoot { margin-top: 8px; font-size: 13px; font-style: italic; color: #77726a; line-height: 1.45; }
+#cfg .cfgfoot.center { text-align: center; }
 #cfg .cfgrow { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 0;
   background: none; border: 0; border-bottom: 1px solid #1f1e1c; font: inherit; font-size: 16px; color: inherit; text-align: left; }
 #cfg .cfgrow.tap { cursor: pointer; }
@@ -316,10 +318,6 @@ html.wide #title .menu button { width: auto; min-width: 22%; padding: 1.2% 3%; f
 #cfg .cfgwrap.split { display: flex; }
 #cfg .cfgwrap.split .cfgleft { position: relative; flex: 0 0 38%; border-right: 1px solid #2c2a27; }
 #cfg .cfgwrap.split .cfgright { position: relative; flex: 1; overflow: hidden; }
-#cfg .cfgwrap.split .cfgleft .cfgtitle { padding: 0 6%; }
-#cfg .cfgwrap.split .cfgleft .cfgback { max-width: none; }
-#cfg .cfgwrap.split .cfgleft .cfgnav { justify-content: flex-end; }
-#cfg .cfgwrap.split .cfgleft .cfgtitle { text-align: left; left: 22px; right: auto; padding: 0; }
 #cfg .cfgwrap.split .cfgleft .cfgbody, #cfg .cfgwrap.split .cfgright .cfgbody { padding: 0 18px 30px; }
 #cfg .cfgwrap.split .cfgrow { font-size: 15px; }
 #cfg .cfgwrap.split .cfgrow.sel .cfglabel { color: #fff; }

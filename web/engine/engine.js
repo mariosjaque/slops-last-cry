@@ -923,10 +923,10 @@ html.touch #__next.deadend{display:block}
         wrap.innerHTML = '<div class="cfgleft"></div><div class="cfgright"></div>';
         const left = $('.cfgleft', wrap);
         const lp = pageRootWide();
-        left.innerHTML = '<div class="cfgpage"><div class="cfgnav"><button class="cfgback">' + esc(STR.Config_ButtonBack || 'Return') +
-          '</button><div class="cfgtitle">' + esc(lp.title) + '</div></div><div class="cfgbody"></div></div>';
+        left.innerHTML = '<div class="cfgpage"><div class="cfgnav"><div class="cfgtitle">' + esc(lp.title) +
+          '</div></div><div class="cfgbody"></div></div>';
         $('.cfgbody', left).appendChild(lp.body);
-        $('.cfgback', left).onclick = () => this.close();
+        fitNav($('.cfgnav', left));
         this.leftRefresh = lp.refresh;
         this.host = $('.cfgright', wrap);
         this.select(first || pageBrightness);
@@ -956,8 +956,10 @@ html.touch #__next.deadend{display:block}
         '</button><div class="cfgtitle">' + esc(pg.title) + '</div></div><div class="cfgbody"></div>';
       $('.cfgbody', el).appendChild(pg.body);
       $('.cfgback', el).onclick = () => prev ? this.pop() : this.close();
-      if (this.wide && !prev) $('.cfgback', el).style.visibility = 'hidden';
+      // iPad: the first page on the right has Return at the top right, as in the original.
+      if (this.wide && !prev) $('.cfgback', el).classList.add('right');
       wrap.appendChild(el);
+      fitNav($('.cfgnav', el));
       const rec = { title: pg.title, el, refresh: pg.refresh };
       this.stack.push(rec);
       if (!instant && prev) {
@@ -974,6 +976,30 @@ html.touch #__next.deadend{display:block}
       setTimeout(() => top.el.remove(), 320);
     }
   };
+  // Navigation bar text never gets cut off with "...": the title keeps clear of the buttons and both
+  // shrink until they fit.
+  function fitNav(nav) {
+    if (!nav) return;
+    const title = $('.cfgtitle', nav), btn = $('.cfgback', nav);
+    const run = () => {
+      if (!nav.isConnected || !nav.clientWidth) return;
+      [title, btn].forEach(e => { if (e) e.style.fontSize = ''; });
+      const w = nav.clientWidth;
+      if (btn) {
+        let fs = parseFloat(getComputedStyle(btn).fontSize);
+        while (btn.scrollWidth > w * 0.3 && fs > 9) { fs -= 0.5; btn.style.fontSize = fs + 'px'; }
+      }
+      if (title) {
+        const side = btn ? btn.offsetWidth + 16 : 0;
+        title.style.paddingLeft = title.style.paddingRight = side + 'px';
+        let fs = parseFloat(getComputedStyle(title).fontSize);
+        while (title.scrollWidth > title.clientWidth && fs > 9) { fs -= 0.5; title.style.fontSize = fs + 'px'; }
+      }
+    };
+    requestAnimationFrame(run);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(run);
+  }
+  window.addEventListener('resize', () => document.querySelectorAll('#cfg .cfgnav').forEach(fitNav));
   // Small builders for grouped table sections and rows.
   function section(header, rows, footer) {
     const sec = document.createElement('div'); sec.className = 'cfgsec';
@@ -982,6 +1008,7 @@ html.touch #__next.deadend{display:block}
     rows.filter(Boolean).forEach(r => g.appendChild(r));
     sec.appendChild(g);
     if (footer) { const f = document.createElement('div'); f.className = 'cfgfoot'; f.textContent = footer; sec.appendChild(f); }
+    sec.foot = sec.lastChild;
     return sec;
   }
   function row(label, opt) {
@@ -1266,7 +1293,8 @@ html.touch #__next.deadend{display:block}
     const r = document.createElement('button'); r.className = 'cfgrow tap savecell';
     const th = s && thumbFor(s);
     const fmt = STR.ConfigSave_DataCharFormat || 'The Story of %@ and %@';
-    const story = s ? fmt.replace('%@', s.names.main).replace('%@', s.names.sub) : (STR.ConfigSave_NoDataPlayerName || '**');
+    const none = STR.ConfigSave_NoDataPlayerName || '**';
+    const story = s ? fmt.replace('%@', s.names.main).replace('%@', s.names.sub) : fmt.replace('%@', none).replace('%@', none);
     const when = s ? new Date(s.time).toLocaleString() : (STR.ConfigSave_NoDataDate || '****-**-** **:**:**');
     r.innerHTML = '<span class="thumb"' + (th ? ' style="background-image:url(&quot;' + url(th) + '&quot;)"' : '') + '></span>' +
       '<span class="savetext"><span class="d">' + esc(story) + '</span><span class="t">' + esc(s && s.title ? s.title : '') + '</span>' +
@@ -1282,10 +1310,15 @@ html.touch #__next.deadend{display:block}
     const render = () => {
       body.innerHTML = '';
       if (mode === 'save') { const m = document.createElement('div'); m.className = 'cfghint'; m.textContent = STR.ConfigSave_HeadMessage || 'Saving story data. Is it okay to overwrite?'; body.appendChild(m); }
-      const auto = LS.get('auto', null);
-      body.appendChild(section(mode === 'save' ? null : (STR.ConfigSave_AutoSaveSectionHeader || 'Current saved data'),
-        [saveCell('auto', auto, mode === 'load' && auto ? () => { Cfg.close(); loadState(auto); } : null)],
-        STR.ConfigSave_AutoSaveSectionFooter || 'Auto Save'));
+      // The autosave is only listed when loading; saving from the story only offers the slots.
+      if (mode === 'load') {
+        const auto = LS.get('auto', null);
+        const as = section(STR.ConfigSave_AutoSaveSectionHeader || 'Current saved data',
+          [saveCell('auto', auto, auto ? () => { Cfg.close(); loadState(auto); } : null)],
+          STR.ConfigSave_AutoSaveSectionFooter || 'Auto Save');
+        as.foot.classList.add('center');
+        body.appendChild(as);
+      }
       body.appendChild(section(null, SLOTS.map(k => {
         const s = LS.get(k, null);
         if (mode === 'load') return saveCell(k, s, s ? () => { Cfg.close(); loadState(s); } : null);
