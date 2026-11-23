@@ -1239,7 +1239,7 @@ html.touch #__next.deadend{display:block}
   function pageVolume() {
     const body = document.createElement('div');
     body.appendChild(section(null, [sliderRow('master', 0, 100, 5, null)]));
-    body.appendChild(section('Port-specific settings', [
+    body.appendChild(section('Granular control', [
       sliderRow('bgm', 0, 100, 5, 'Music'), sliderRow('env', 0, 100, 5, 'Ambience'), sliderRow('se', 0, 100, 5, 'Sound Effects')]));
     return { title: STR.Config_Sound || 'Volume', body };
   }
