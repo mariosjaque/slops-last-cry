@@ -279,10 +279,51 @@
     ['pj_title_bg.png', 'pagejump_title_bg@2x~iphone.png', 'whole']
   ];
   const ALAC_TRACKS = /^(scare|secret|senti|sequence)\.m4a$/;
+  // Bumped when the setup produces something new; the Android app reruns the setup for older data.
+  const SETUP_VERSION = 2;
+
+  // The game's .mp4/.mov files keep their index (moov) after the media data. Android's WebView
+  // could not start those from the app's local files, so they are rewritten with the index first
+  // ("fast start"); the chunk offsets inside it are moved by the same amount.
+  function faststart(b) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), top = [];
+    for (let o = 0; o + 8 <= b.length;) {
+      let sz = dv.getUint32(o), hdr = 8;
+      if (sz === 1) { sz = Number(dv.getBigUint64(o + 8)); hdr = 16; } else if (sz === 0) sz = b.length - o;
+      if (sz < hdr || o + sz > b.length) return null;
+      top.push({ t: td.decode(b.subarray(o + 4, o + 8)), o, sz }); o += sz;
+    }
+    const mi = top.findIndex(x => x.t === 'moov'), di = top.findIndex(x => x.t === 'mdat');
+    if (mi < 0 || di < 0 || mi < di) return null;
+    const moov = top[mi], moovBytes = b.slice(moov.o, moov.o + moov.sz), mv = new DataView(moovBytes.buffer);
+    const delta = moov.sz;
+    const walk = (o, e) => {
+      while (o + 8 <= e) {
+        const sz = mv.getUint32(o), t = td.decode(moovBytes.subarray(o + 4, o + 8));
+        if (sz < 8) return;
+        if (['moov', 'trak', 'mdia', 'minf', 'stbl'].includes(t)) walk(o + 8, o + sz);
+        else if (t === 'stco') { const n = mv.getUint32(o + 12); for (let i = 0; i < n; i++) mv.setUint32(o + 16 + i * 4, mv.getUint32(o + 16 + i * 4) + delta); }
+        else if (t === 'co64') { const n = mv.getUint32(o + 12); for (let i = 0; i < n; i++) mv.setBigUint64(o + 16 + i * 8, mv.getBigUint64(o + 16 + i * 8) + BigInt(delta)); }
+        o += sz;
+      }
+    };
+    walk(0, moovBytes.length);
+    const order = top.slice(0, di).concat([moov], top.slice(di).filter(x => x !== moov));
+    const out = new Uint8Array(b.length); let p = 0;
+    for (const x of order) { out.set(x === moov ? moovBytes : b.subarray(x.o, x.o + x.sz), p); p += x.sz; }
+    return out;
+  }
+  // Decodes a compressed audio file (AAC in .mp4) to 48 kHz channels.
+  async function decodeCompressed(b) {
+    const ctx = new OfflineAudioContext(2, 1, 48000);
+    const buf = await ctx.decodeAudioData(b.slice().buffer);
+    const ch = []; for (let i = 0; i < buf.numberOfChannels; i++) ch.push(buf.getChannelData(i));
+    return ch;
+  }
 
   // ---------- Main ----------
-  async function convertGame(fs, log) {
-    log = log || (() => { });
+  async function convertGame(fs, log, opt) {
+    log = log || (() => { }); opt = opt || {};
     const step = (name, i, n) => log({ step: name, i, n });
     const root = (await fs.list(APP)).sort(), lproj = (await fs.list(APP + 'en.lproj/')).sort();
     if (!root.includes('page.plist') || !lproj.length) throw new Error("This doesn't look like Banshee's Last Cry (ink-en.app not found).");
@@ -329,24 +370,41 @@
       const s = dv.getInt32(4, true), e = dv.getInt32(8, true), r = dv.getInt32(12, true);
       if (s >= 0) loops[n.slice(0, -4)] = [s, e, r];
     }
+    // music stored as .mp4 (AAC) is converted like the rest; the .mp4/.mov files used as movies stay
+    const movies = new Set();
+    for (const k in pages) for (const m of pages[k].matchAll(/playMovie\w*\(\s*['"]([^'"]+)['"]/g)) movies.add(m[1]);
+    const mp4Audio = root.filter(n => /\.mp4$/i.test(n) && !movies.has(n));
     const pl2 = {}; for (const k in pageload) if (Array.isArray(pageload[k]) && pageload[k].length) pl2[k] = pageload[k][0];
     const data = {
       start: pg._start_ || 'mm0010', pages, chapters, pageload: pl2, lproj, root, loops, strings,
       endings: Object.keys(pages).filter(k => pages[k].includes('end_logo')).sort(),
       css: text(await fs.read(APP + 'km.css')), kmjs: text(await fs.read(APP + 'km.js')),
-      audioExt: '.webm'
+      audioExt: '.webm', audioConv: mp4Audio, setupVersion: SETUP_VERSION
     };
     await fs.write('engine/data.js', "/* Made from your own copy of Banshee's Last Cry by the setup. Personal use only. */\nwindow.BLC_DATA=" + JSON.stringify(data) + ';\n');
 
-    // 3. Audio
-    const tracks = root.filter(n => n.endsWith('.aif') || ALAC_TRACKS.test(n));
+    // 3. Movies: index first
+    const media = root.filter(n => movies.has(n) && /\.(mp4|mov)$/i.test(n));
+    for (let i = 0; i < media.length; i++) {
+      step('movies', i, media.length);
+      const b = await fs.read(APP + media[i]); if (!b) continue;
+      try { const fixed = faststart(b); if (fixed) await fs.write(APP + media[i], fixed); } catch (e) { log({ warn: media[i] + ': ' + e.message }); }
+    }
+
+    // 4. Audio (.aif/.m4a become <name>.webm; .mp4 music becomes <name>.mp4.webm)
+    const tracks = root.filter(n => n.endsWith('.aif') || ALAC_TRACKS.test(n)).concat(mp4Audio);
+    const outName = (n) => /\.mp4$/i.test(n) ? n + '.webm' : n.replace(/\.\w+$/, '') + '.webm';
+    const have = new Set(opt.skipExisting ? await fs.list('engine/audio/') : []);
     for (let i = 0; i < tracks.length; i++) {
       step('music', i, tracks.length);
-      const n = tracks[i], b = await fs.read(APP + n);
+      const n = tracks[i];
+      if (have.has(outName(n))) continue;
+      const b = await fs.read(APP + n);
       try {
-        const pcm = n.endsWith('.aif') ? decodeAifc(b) : ALAC.decodeM4A(b);
-        const ch = await resample(pcm, 48000);
-        await fs.write('engine/audio/' + n.replace(/\.\w+$/, '') + '.webm', await encodeOpusWebm(ch));
+        let ch;
+        if (/\.mp4$/i.test(n)) ch = await decodeCompressed(b);
+        else ch = await resample(n.endsWith('.aif') ? decodeAifc(b) : ALAC.decodeM4A(b), 48000);
+        await fs.write('engine/audio/' + outName(n), await encodeOpusWebm(ch));
       } catch (e) { log({ warn: n + ': ' + e.message }); }
     }
     step('done', 1, 1);
@@ -396,6 +454,6 @@
     log({ step: 'extracting', i: entries.length, n: entries.length });
   }
 
-  const api = { convertGame, extractIpa, parseBplist, decodePng, encodePng, decodeAifc, encodeOpusWebm };
+  const api = { SETUP_VERSION, faststart, convertGame, extractIpa, parseBplist, decodePng, encodePng, decodeAifc, encodeOpusWebm };
   (typeof window !== 'undefined' ? window : globalThis).SLCConvert = api;
 })();

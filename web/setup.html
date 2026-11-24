@@ -53,7 +53,7 @@
 (function () {
   const $ = (s) => document.querySelector(s);
   const NATIVE = window.SLCNative || null;
-  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', done: 'Done' };
+  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', movies: 'Preparing movies', done: 'Done' };
   const warns = [];
   function progress(m) {
     if (m.warn) { warns.push(m.warn); $('#warn').textContent = 'Warnings:\n' + warns.join('\n'); return; }
@@ -85,6 +85,19 @@
         }
       }
     };
+    // Update run (the app found files from an older setup): convert again what's already extracted.
+    if (/[?&]update=1/.test(location.search)) {
+      $('#android').hidden = true;
+      $('#status').textContent = 'Updating your game files for this version…';
+      (async () => {
+        try {
+          await SLCConvert.convertGame(fs, progress, { skipExisting: true });
+          NATIVE.setupDone();
+          location.replace('index.html');
+        } catch (e) { fail(e); }
+      })();
+      return;
+    }
     window.slcProgress = (i, n) => progress({ step: 'extracting', i, n });
     window.slcExtracted = async (err) => {
       if (err) return fail(err);

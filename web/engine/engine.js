@@ -15,6 +15,9 @@
   }
   // Optional bridge provided by the Android app (share sheet, saving files).
   const NATIVE = window.SLCNative || null;
+  // Files converted by an older setup: the app reruns the conversion on what it already extracted.
+  const SETUP_VERSION = 2;
+  if (NATIVE && (D.setupVersion || 1) < SETUP_VERSION) { location.replace('setup.html?update=1'); return; }
 
   const APP = 'ink-en.app/';
   const LPROJ = new Set(D.lproj), ROOT = new Set(D.root);
@@ -50,6 +53,8 @@
       const b = name.replace(/\.(aif|m4a)$/i, '');
       return ROOT.has(name) ? 'engine/audio/' + b + (D.audioExt || '.ogg') : null;
     }
+    // .mp4 music converted by newer setups (Android's WebView could not play the originals)
+    if (D.audioConv && D.audioConv.indexOf(name) >= 0) return 'engine/audio/' + name + (D.audioExt || '.webm');
     return ROOT.has(name) ? APP + name : null;
   }
   const url = (p) => p ? enc(p) : null;
