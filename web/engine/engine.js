@@ -218,7 +218,7 @@
   stage.appendChild(branchIcon);
   const T = { x: 0, y: 0, sx: 1, sy: 1, cx: 0.5, cy: 0.5, rot: 0 };
   function applyDim() { dim.style.opacity = (Math.min(85, 100 - S.bgb) / 100).toFixed(2); }
-  let bgName = '', bgInstant = false;
+  let bgName = '', bgInstant = false, bgFadeDur = 0.6;
   function setBgImage(name) {
     const p = imgPath(name);
     if (p === bgCur) return;
@@ -226,7 +226,7 @@
     const back = bgFront === bgA ? bgB : bgA;
     back.style.backgroundImage = p ? 'url("' + url(p) + '")' : 'none';
     // During a page slide the new background arrives with the page, so it replaces the old one at once.
-    const tr = bgInstant ? 'none' : '';
+    const tr = bgInstant ? 'none' : 'opacity ' + bgFadeDur + 's';
     back.style.transition = bgFront.style.transition = tr;
     back.classList.add('on'); bgFront.classList.remove('on'); bgFront = back;
     if (bgInstant) { void back.offsetWidth; back.style.transition = ''; }
@@ -456,8 +456,8 @@ html.touch #__next.deadend{display:block}
     if (prev) { try { prev.win.leave && prev.win.leave(); } catch (e) { log('leave error', e); } }
     const fade = opt.fade != null ? +opt.fade : 0.35;
     const old = prev && prev.frame;
-    // Original page turn (KMPageScrollView): the whole page, background and text, slides away while the
-    // next page's background slides in from the side; its text appears a moment later.
+    // Original page turn (KMPageScrollView): the next page's background slides in from the side over the
+    // current page, which stays where it is; the new page's text appears a moment later.
     if (opt.slide && old && !opt.wipe && !window.BLC_FAST) {
       slideold.innerHTML = '';
       const ob = document.createElement('div'), od = document.createElement('div');
@@ -467,19 +467,26 @@ html.touch #__next.deadend{display:block}
       slideold.append(ob, od);
       slideold.style.transition = 'none'; slideold.style.transform = '';
       old.style.transition = 'none';
+      // park the background layer off to the side so the new background can't show early
+      const d0 = (opt.back ? -1 : 1) * (S.dir === 'L' ? -1 : 1);
+      bgslide.style.transition = 'none'; bgslide.style.transform = 'translateX(' + (d0 * 100) + '%)';
       entrySlide = { old };
       mount(id, opt, null);
       return;
     }
-    if (old) { old.style.transitionDuration = Math.min(fade, 0.6) + 's'; old.classList.remove('on'); }
+    if (old) { old.style.transitionDuration = (opt.wipe ? Math.min(fade, 0.6) : fade) + 's'; old.classList.remove('on'); }
     // the background shows at full brightness between pages
     if (!window.BLC_FAST) { dim.style.transition = 'opacity ' + Math.min(Math.max(fade, 0.3), 0.6) + 's'; dim.style.opacity = 0; }
     if (opt.wipe) {
       const p = imgPath(opt.wipe);
       if (p) { wipe.style.backgroundImage = 'url("' + url(p) + '")'; wipe.style.transition = 'opacity ' + (fade / 2) + 's'; wipe.style.opacity = 1; }
     }
-    const delay = old ? Math.min(fade, 0.6) * 1000 : 0;
-    setTimeout(() => mount(id, opt, old), delay);
+    // Original fade jump (KMPageControl loadedFadeJump): the next page is drawn behind and the current
+    // one, background and text, dissolves into it. A mask transition (trs) still waits for the wipe.
+    if (opt.wipe || window.BLC_FAST) { setTimeout(() => mount(id, opt, old), old && !window.BLC_FAST ? Math.min(fade, 0.6) * 1000 : 0); return; }
+    if (old) setTimeout(() => old.remove(), fade * 1000 + 50);
+    bgFadeDur = fade;
+    mount(id, opt, null);
   }
 
   let entrySlide = null;
@@ -575,8 +582,11 @@ html.touch #__next.deadend{display:block}
       win.addEventListener('scroll', () => {
         const de = doc.documentElement, vh = win.innerHeight, sh = de.scrollHeight;
         if (sh <= vh + 2) return;
-        const h = Math.max(30, vh * vh / sh), top = (win.scrollY / (sh - vh)) * (vh - h);
-        bar.style.height = h + 'px'; bar.style.transform = 'translateY(' + Math.max(0, Math.min(vh - h, top)) + 'px)';
+        // KMWebView sets scrollIndicatorInsets to 10 pt top/left/right and 50 pt bottom
+        const pt = win.innerWidth / (WIDE ? 768 : 320), t0 = 10 * pt, track = vh - 60 * pt;
+        const h = Math.max(30, track * vh / sh), top = t0 + (win.scrollY / (sh - vh)) * (track - h);
+        bar.style.right = (10 * pt) + 'px';
+        bar.style.height = h + 'px'; bar.style.transform = 'translateY(' + Math.max(t0, Math.min(t0 + track - h, top)) + 'px)';
         bar.classList.add('on'); clearTimeout(t); t = setTimeout(() => bar.classList.remove('on'), 250);
       }, { passive: true });
     }
@@ -620,7 +630,9 @@ html.touch #__next.deadend{display:block}
     try { win.focus(); } catch (e) { }
     // As in the original, the new background is first shown on its own at full brightness; the text
     // (and the background dimming) fades in a moment later. A tap during that pause shows it at once.
-    const HOLD = 0.6;
+    // KMPageControl callPlayAfter: the text fades in over 0.3 s after a 0.4 s delay
+    // (pageScrolledPageFadeDelay / pageScrolledPageFadeTime).
+    const HOLD = 0.4;
     const begin = () => {
       busy = false; stage.classList.remove('busy');
       if (window.BLC_FAST) reveal(entry);
@@ -634,19 +646,26 @@ html.touch #__next.deadend{display:block}
       dim.style.transition = 'none'; dim.style.opacity = 0;
       bgslide.style.transition = 'none'; bgslide.style.transform = 'translateX(' + (d * 100) + '%)';
       void bgslide.offsetWidth;
-      const tr = 'transform .3s ease-out';
-      [bgslide, slideold, old].forEach(el => { el.style.transition = tr; });
+      const tr = 'transform .3s ease-in-out';   // UIScrollView's animated page change
+      // the old text is hidden where the incoming page already covers it
+      old.style.clipPath = 'inset(0 0 0 0)'; void old.offsetWidth;
+      bgslide.style.transition = tr; old.style.transition = tr.replace('transform', 'clip-path');
       bgslide.style.transform = '';
-      slideold.style.transform = old.style.transform = 'translateX(' + (-d * 100) + '%)';
+      old.style.clipPath = d > 0 ? 'inset(0 100% 0 0)' : 'inset(0 0 0 100%)';
       setTimeout(() => {
-        old.remove(); slideold.innerHTML = ''; slideold.style.transition = 'none'; slideold.style.transform = '';
+        old.remove(); slideold.innerHTML = '';
         bgslide.style.transition = 'none';
         if (cur === entry) begin();
       }, 320);
     } else {
       // a fade: wait for the background crossfade before the pause
       if (window.BLC_FAST) begin();
-      else { busy = false; stage.classList.remove('busy'); startPage(); entry.holdT = setTimeout(() => reveal(entry), (0.6 + HOLD) * 1000); }
+      else {
+        busy = false; stage.classList.remove('busy'); startPage();
+        const fadeT = opt.wipe ? fade / 2 + 0.2 : bgFadeDur;
+        bgFadeDur = 0.6;
+        entry.holdT = setTimeout(() => reveal(entry), (fadeT + HOLD) * 1000);
+      }
     }
     function startPage() {
       setTimeout(() => {
@@ -780,11 +799,15 @@ html.touch #__next.deadend{display:block}
     const p = parseSel(s);
     if (!p) return;
     switch (p.type) {
-      case 'flt': case 'alt': case undefined:
-        if (p.target) goto(p.target, { fade: p.args[0] ? +p.args[0] : 0.8 });
+      // defaults as in the original's apij.js: flt fades over 1 s, trs wipes over 0.5 s, alt turns the page
+      case 'alt':
+        if (p.target) goto(p.target, { slide: true });
+        break;
+      case 'flt': case undefined:
+        if (p.target) goto(p.target, { fade: p.args[0] ? +p.args[0] : 1 });
         break;
       case 'trs':
-        if (p.target) goto(p.target, { wipe: p.args[0], fade: p.args[1] ? +p.args[1] : 0.6 });
+        if (p.target) goto(p.target, { wipe: p.args[0], fade: p.args[1] ? +p.args[1] : 0.5 });
         break;
       case 'nameInput': openKiller(); break;
       case 'returnStart': restartStory(); break;
