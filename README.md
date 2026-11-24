@@ -1,6 +1,6 @@
 # Slop's Last Cry
 
-A personal, unofficial port of the iOS game *Banshee's Last Cry* (Aksys Games, 32-bit iOS) to a small web engine,
+A unofficial port of the iOS game *Banshee's Last Cry* (Aksys Games, 32-bit iOS) to a small web engine,
 so it can be played on PC browsers and on Android.
 
 **This repository contains no game content.** No text, images, music or fonts from the game are included in the
@@ -23,7 +23,7 @@ Don't share converted game files.
 
 ## Web version (PC)
 
-1. Download `slops-last-cry-web.zip` from the latest Actions run (or a release) and unzip it into a folder.
+1. Download `slops-last-cry-web.zip` from the latest release and unzip it into a folder.
 2. Open `setup.html` in **Chrome or Edge** (the converter needs WebCodecs and the File System Access API).
 3. Choose your `.ipa`, then choose the unzipped folder. The converter writes `ink-en.app/` and `engine/` files into it.
 4. Open `index.html`. If your browser blocks local files, serve the folder instead, for example
@@ -31,7 +31,7 @@ Don't share converted game files.
 
 ## Android version
 
-1. Install `slops-last-cry.apk` from the latest Actions run (allow installing from unknown sources).
+1. Install `slops-last-cry.apk` from the latest release (allow installing from unknown sources).
 2. Open the app and tap **Choose the .ipa…**, or first copy the `.ipa` to
    `Android/obb/xyz.mariosjaque.slopslastcry/main.1.xyz.mariosjaque.slopslastcry.obb` so the setup page finds it and offers **Use it**.
 3. Wait for extraction and conversion (a few minutes; about 1 GB of free space is needed during setup).
