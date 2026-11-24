@@ -105,7 +105,13 @@
         this.el.addEventListener('error', () => log('audio missing', file));
       }
     }
-    start(fadeIn) { if (!this.el) return this; this.apply(); this.el.play().catch(e => log('play blocked', this.file, e.message)); this.fadeTo(this.target, fadeIn); return this; }
+    start(fadeIn) {
+      if (!this.el) return this;
+      this.apply();
+      if (Audio_.suspended) this.held = true;   // the app is in the background: start when it comes back
+      else this.el.play().catch(e => log('play blocked', this.file, e.message));
+      this.fadeTo(this.target, fadeIn); return this;
+    }
     fadeTo(v, t, onEnd) { this.fade = { from: this.vol, to: v, t0: performance.now(), dur: Math.max(0, (t || 0) * 1000), onEnd }; if (!t) this.step(performance.now()); }
     stop(t) { if (this.dead) return; if (!t) { this.kill(); return; } this.fadeTo(0, t, () => this.kill()); this.stopping = true; }
     kill() { this.dead = true; if (this.el) { this.el.pause(); this.el.removeAttribute('src'); this.el.load(); } }
@@ -128,7 +134,22 @@
     }
   }
   const Audio_ = {
-    bgm: null, env: null, se: new Set(), fading: new Set(),
+    bgm: null, env: null, se: new Set(), fading: new Set(), suspended: false,
+    // Pause everything while the app is in the background (as iOS does) and pick up where it left off.
+    suspend() {
+      if (this.suspended) return; this.suspended = true;
+      for (const t of [this.bgm, this.env, ...this.se, ...this.fading])
+        if (t && !t.dead && t.el && !t.el.paused) { t.held = true; t.el.pause(); }
+      const mv = document.querySelector('video');
+      if (mv && !mv.paused) { mv.dataset.held = '1'; mv.pause(); }
+    },
+    resume() {
+      if (!this.suspended) return; this.suspended = false;
+      for (const t of [this.bgm, this.env, ...this.se, ...this.fading])
+        if (t && t.held) { t.held = false; if (!t.dead && t.el) t.el.play().catch(() => { }); }
+      const mv = document.querySelector('video');
+      if (mv && mv.dataset.held) { delete mv.dataset.held; mv.play().catch(() => { }); }
+    },
     tick() {
       const n = performance.now();
       for (const t of [this.bgm, this.env, ...this.se, ...this.fading]) if (t) t.step(n);
@@ -1520,6 +1541,10 @@ html.touch #__next.deadend{display:block}
   }
 
   // ---------- Input ----------
+  // Background audio: the Android app calls these from onPause/onResume; mobile browsers use page visibility.
+  window.SLCPause = () => Audio_.suspend();
+  window.SLCResume = () => Audio_.resume();
+  document.addEventListener('visibilitychange', () => { if (TOUCH || NATIVE) document.hidden ? Audio_.suspend() : Audio_.resume(); });
   // Android back button: behaves like Esc; returns false when there is nothing to close (the app then exits).
   window.SLCBack = function () {
     const atTitle = $('#title').classList.contains('on') && !anyOpenOverTitle() && !$('#names').classList.contains('on');

@@ -138,10 +138,19 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); web.saveState(out); }
 
     @Override
-    protected void onPause() { super.onPause(); web.onPause(); web.evaluateJavascript("document.querySelectorAll('audio,video').forEach(function(m){if(!m.paused){m.dataset.slcResume='1';m.pause();}})", null); }
+    protected void onPause() {
+        super.onPause();
+        // Stop the game's music and sounds while the app is in the background, then pause the WebView.
+        web.evaluateJavascript("window.SLCPause && SLCPause()", null);
+        web.onPause();
+    }
 
     @Override
-    protected void onResume() { super.onResume(); web.onResume(); web.evaluateJavascript("document.querySelectorAll('audio,video').forEach(function(m){if(m.dataset.slcResume){delete m.dataset.slcResume;m.play().catch(function(){});}})", null); }
+    protected void onResume() {
+        super.onResume();
+        web.onResume();
+        web.evaluateJavascript("window.SLCResume && SLCResume()", null);
+    }
 
     @Override
     @SuppressWarnings("deprecation")
