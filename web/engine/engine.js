@@ -205,7 +205,7 @@
   setInterval(() => Audio_.tick(), 20);
 
   // ---------- Stage ----------
-  const stage = $('#stage'), bgwrap = $('#bgwrap'), bgA = $('#bgA'), bgB = $('#bgB'), movie = $('#movie');
+  const stage = $('#stage'), bgslide = $('#bgslide'), slideold = $('#slideold'), bgwrap = $('#bgwrap'), bgA = $('#bgA'), bgB = $('#bgB'), movie = $('#movie');
   const dim = $('#dim'), bright = $('#bright'), wipe = $('#wipe'), textlayer = $('#textlayer'), backdrop = $('#backdrop');
   let bgFront = bgA, bgCur = null;
   const branchIcon = document.createElement('img');
@@ -213,14 +213,18 @@
   stage.appendChild(branchIcon);
   const T = { x: 0, y: 0, sx: 1, sy: 1, cx: 0.5, cy: 0.5, rot: 0 };
   function applyDim() { dim.style.opacity = (Math.min(85, 100 - S.bgb) / 100).toFixed(2); }
-  let bgName = '';
+  let bgName = '', bgInstant = false;
   function setBgImage(name) {
     const p = imgPath(name);
     if (p === bgCur) return;
     bgCur = p; bgName = name || '';
     const back = bgFront === bgA ? bgB : bgA;
     back.style.backgroundImage = p ? 'url("' + url(p) + '")' : 'none';
+    // During a page slide the new background arrives with the page, so it replaces the old one at once.
+    const tr = bgInstant ? 'none' : '';
+    back.style.transition = bgFront.style.transition = tr;
     back.classList.add('on'); bgFront.classList.remove('on'); bgFront = back;
+    if (bgInstant) { void back.offsetWidth; back.style.transition = ''; }
     backdrop.style.backgroundImage = p ? 'url("' + url(p) + '")' : 'none';
   }
   function applyT(t) {
@@ -447,7 +451,24 @@ html.touch #__next.deadend{display:block}
     if (prev) { try { prev.win.leave && prev.win.leave(); } catch (e) { log('leave error', e); } }
     const fade = opt.fade != null ? +opt.fade : 0.35;
     const old = prev && prev.frame;
+    // Original page turn (KMPageScrollView): the whole page, background and text, slides away while the
+    // next page's background slides in from the side; its text appears a moment later.
+    if (opt.slide && old && !opt.wipe && !window.BLC_FAST) {
+      slideold.innerHTML = '';
+      const ob = document.createElement('div'), od = document.createElement('div');
+      ob.style.backgroundImage = bgCur ? 'url("' + url(bgCur) + '")' : 'none';
+      ob.style.transform = bgwrap.style.transform; ob.style.transformOrigin = bgwrap.style.transformOrigin;
+      od.className = 'sdim'; od.style.opacity = getComputedStyle(dim).opacity;
+      slideold.append(ob, od);
+      slideold.style.transition = 'none'; slideold.style.transform = '';
+      old.style.transition = 'none';
+      entrySlide = { old };
+      mount(id, opt, null);
+      return;
+    }
     if (old) { old.style.transitionDuration = Math.min(fade, 0.6) + 's'; old.classList.remove('on'); }
+    // the background shows at full brightness between pages
+    if (!window.BLC_FAST) { dim.style.transition = 'opacity ' + Math.min(Math.max(fade, 0.3), 0.6) + 's'; dim.style.opacity = 0; }
     if (opt.wipe) {
       const p = imgPath(opt.wipe);
       if (p) { wipe.style.backgroundImage = 'url("' + url(p) + '")'; wipe.style.transition = 'opacity ' + (fade / 2) + 's'; wipe.style.opacity = 1; }
@@ -456,14 +477,17 @@ html.touch #__next.deadend{display:block}
     setTimeout(() => mount(id, opt, old), delay);
   }
 
+  let entrySlide = null;
   function mount(id, opt, old) {
     if (old) old.remove();
+    const slide = entrySlide; entrySlide = null;
+    bgInstant = !!slide;
     branchIcon.classList.remove('on');
     $('#secretbtn').classList.remove('on');
     resetT();
     movieKeep = false;
     const ctx = opt.ctx || locate(id, cur && cur.ctx && cur.ctx.chap);
-    const entry = { id, ctx, override: null, secret: null, linear: true, localsAtEntry: localFlags() };
+    const entry = { id, ctx, override: null, secret: null, linear: true, localsAtEntry: localFlags(), slide, revealed: false };
     {
       const pos = history.length;
       if (trail.length < pos) trail = history.map(h => ({ id: h.id, ctx: h.ctx, locals: h.locals }));
@@ -525,6 +549,7 @@ html.touch #__next.deadend{display:block}
     const pad = doc.createElement('div'); pad.id = '__pad'; doc.body.appendChild(pad);
     // events inside the scene document
     doc.addEventListener('click', ev => {
+      if (!entry.revealed) { ev.stopPropagation(); reveal(entry); return; }
       if (ev.target.closest && ev.target.closest('a,input,button')) return;
       if (!TOUCH) { advance(); return; }
       // Original controls (KMViewController tapProc): the outer 96 of 320 points on each side turn the page.
@@ -585,12 +610,41 @@ html.touch #__next.deadend{display:block}
     doc.addEventListener('contextmenu', ev => { ev.preventDefault(); back(); });
     // show
     const fade = opt.fade != null ? Math.max(0.25, +opt.fade) : 0.35;
-    entry.frame.style.transitionDuration = fade + 's';
-    requestAnimationFrame(() => entry.frame.classList.add('on'));
     if (opt.wipe) { wipe.style.transition = 'opacity ' + (fade / 2 + 0.2) + 's'; wipe.style.opacity = 0; }
-    busy = false; stage.classList.remove('busy');
+    bgInstant = false;
     try { win.focus(); } catch (e) { }
-    setTimeout(() => {
+    // As in the original, the new background is first shown on its own at full brightness; the text
+    // (and the background dimming) fades in a moment later. A tap during that pause shows it at once.
+    const HOLD = 0.6;
+    const begin = () => {
+      busy = false; stage.classList.remove('busy');
+      if (window.BLC_FAST) reveal(entry);
+      else entry.holdT = setTimeout(() => reveal(entry), HOLD * 1000);
+      startPage();
+    };
+    if (entry.slide && !window.BLC_FAST) {
+      busy = true; stage.classList.add('busy');
+      const old = entry.slide.old;
+      const d = (opt.back ? -1 : 1) * (S.dir === 'L' ? -1 : 1);   // "Right": the next page comes in from the right
+      dim.style.transition = 'none'; dim.style.opacity = 0;
+      bgslide.style.transition = 'none'; bgslide.style.transform = 'translateX(' + (d * 100) + '%)';
+      void bgslide.offsetWidth;
+      const tr = 'transform .3s ease-out';
+      [bgslide, slideold, old].forEach(el => { el.style.transition = tr; });
+      bgslide.style.transform = '';
+      slideold.style.transform = old.style.transform = 'translateX(' + (-d * 100) + '%)';
+      setTimeout(() => {
+        old.remove(); slideold.innerHTML = ''; slideold.style.transition = 'none'; slideold.style.transform = '';
+        bgslide.style.transition = 'none';
+        if (cur === entry) begin();
+      }, 320);
+    } else {
+      // a fade: wait for the background crossfade before the pause
+      if (window.BLC_FAST) begin();
+      else { busy = false; stage.classList.remove('busy'); startPage(); entry.holdT = setTimeout(() => reveal(entry), (0.6 + HOLD) * 1000); }
+    }
+    function startPage() {
+      setTimeout(() => {
       if (cur !== entry) return;
       if (!opt.back && !opt.load) { try { win.enter && win.enter(); } catch (e) { log('enter error', e); } }
       try { win.play && win.play(); } catch (e) { log('play error', entry.id, e); }
@@ -601,7 +655,17 @@ html.touch #__next.deadend{display:block}
       }
       autosave();
       preloadNext(entry);
-    }, 60);
+      }, 60);
+    }
+  }
+  // Shows the page's text and dims the background to the player's setting.
+  function reveal(entry) {
+    if (!entry || entry.revealed) return;
+    entry.revealed = true; clearTimeout(entry.holdT);
+    const t = window.BLC_FAST ? 0 : 0.3;
+    dim.style.transition = 'opacity ' + t + 's'; applyDim();
+    entry.frame.style.transitionDuration = t + 's';
+    entry.frame.classList.add('on');
   }
 
   // Keep the first lines of text clear of the BRANCH icon until the reader scrolls.
@@ -639,9 +703,9 @@ html.touch #__next.deadend{display:block}
   function next() {
     if (!cur || busy || anyOpen()) return;
     if (!cur.linear) { flashChoices(); return; }
-    if (cur.override) { goto(cur.override); return; }
+    if (cur.override) { goto(cur.override, { slide: true }); return; }
     const n = ctxNext(cur);
-    if (n) { goto(n.id, n.ctx ? { ctx: n.ctx } : {}); return; }
+    if (n) { goto(n.id, n.ctx ? { ctx: n.ctx, slide: true } : { slide: true }); return; }
     backToChoice();
   }
   function backToChoice() {
@@ -662,17 +726,20 @@ html.touch #__next.deadend{display:block}
     return w.scrollY >= limit - 6;
   }
   function advance() {
+    if (cur && !cur.revealed && !busy) { reveal(cur); return; }
     if (!cur || !cur.win || busy || selAnim || anyOpen()) return;
     if (!atBottom()) { cur.win.scrollBy({ top: cur.win.innerHeight * 0.75, behavior: 'smooth' }); return; }
     if (cur.linear) next(); else flashChoices();
   }
   // Touch: scrolling is done by swiping; a tap only turns the page once the end has been reached.
   function tapAdvance() {
+    if (cur && !cur.revealed && !busy) { reveal(cur); return; }
     if (!cur || !cur.win || busy || selAnim || anyOpen()) return;
     if (!atBottom()) return;
     if (cur.linear) next(); else flashChoices();
   }
   function sideAdvance() {
+    if (cur && !cur.revealed && !busy) { reveal(cur); return; }
     if (!cur || !cur.win || busy || selAnim || anyOpen()) return;
     if (cur.linear) next(); else flashChoices();
   }
@@ -683,6 +750,7 @@ html.touch #__next.deadend{display:block}
   function animateChoice(li, done) {
     if (window.BLC_FAST || !cur || !cur.doc) return done();
     selAnim = true; stage.classList.add('busy');
+    dim.style.transition = 'opacity .3s linear'; dim.style.opacity = 0;
     const doc = cur.doc, win = cur.win, r = li.getBoundingClientRect();
     const wrap = li.parentNode.cloneNode(false);
     const c = li.cloneNode(true);
@@ -724,7 +792,7 @@ html.touch #__next.deadend{display:block}
     if (busy || selAnim || anyOpen() || !history.length) return;
     const h = history.pop();
     setLocalFlags(h.locals);
-    goto(h.id, { noHistory: true, back: true, ctx: h.ctx });
+    goto(h.id, { noHistory: true, back: true, ctx: h.ctx, slide: true });
   }
 
   // ---------- Saving ----------

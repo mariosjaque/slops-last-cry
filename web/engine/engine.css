@@ -28,6 +28,9 @@ html, body {
   80% { transform: translate(calc(-50% + 5px), -2px); }
 }
 #bgwrap { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform; }
+#bgslide, #slideold { position: absolute; inset: 0; pointer-events: none; }
+#slideold > div { position: absolute; inset: 0; background: center/cover no-repeat; }
+#slideold .sdim { background: #000; }
 .bg { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity .6s; }
 .bg.on { opacity: 1; }
 #movie { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
