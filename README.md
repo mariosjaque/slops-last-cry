@@ -3,6 +3,8 @@
 A unofficial port of the iOS game *Banshee's Last Cry* (Aksys Games, 32-bit iOS) to a small web engine,
 so it can be played on PC browsers and on Android.
 
+background music is likely broken
+
 **This repository contains no game content.** No text, images, music or fonts from the game are included in the
 code, the web zip or the APK. You need your own copy of the game as an `.ipa` file. On first run, the setup page
 reads that file and converts everything locally, on your own device:
