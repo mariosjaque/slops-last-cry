@@ -44,8 +44,11 @@ Requires Android 8.0 or newer with an up-to-date Android System WebView (Chrome 
 - **Web:** nothing to build; `web/` is the release. The workflow just zips it.
 - **Android:** JDK 17, Android SDK 34 and Gradle 8.7: `gradle -p android assembleRelease`.
   The workflow does this automatically and uploads `slops-last-cry.apk`.
-  The APK is signed with `android/app/slc.keystore`, a throwaway key committed on purpose so updates install over
-  older builds.
+  The APK is signed with your own release key, which never goes into the repository. CI reads it from two
+  repository secrets (Settings > Secrets and variables > Actions):
+  `SIGNING_KEYSTORE_B64` (the `.p12` keystore, base64-encoded) and `SIGNING_PASSWORD`.
+  To build locally, set `SLC_KEYSTORE` to the `.p12` path and `SLC_KEYSTORE_PASSWORD`; without them Gradle builds
+  an unsigned release APK. Keep a backup of the key: updates only install over the app if they're signed with it.
 - To publish a release with both files attached, push a tag such as `v1.0`.
 
 ## Third-party code and fonts

@@ -33,8 +33,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+      - name: Write the signing key from secrets
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_B64" ]; then
+            echo "::error::Add the SIGNING_KEYSTORE_B64 and SIGNING_PASSWORD secrets (see README) to build a signed APK."
+            exit 1
+          fi
+          echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
       - name: Build the APK
+        env:
+          SLC_KEYSTORE: ${{ runner.temp }}/release.p12
+          SLC_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: gradle -p android assembleRelease --stacktrace
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"
       - name: Rename
         run: cp android/app/build/outputs/apk/release/app-release.apk slops-last-cry.apk
       - name: Check the APK

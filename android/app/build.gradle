@@ -42,24 +42,26 @@ android {
         versionName '1.0'
     }
 
+    // The release key is never stored in the repository. CI writes it from the SIGNING_KEYSTORE_B64 and
+    // SIGNING_PASSWORD secrets; locally, set SLC_KEYSTORE (path to release.p12) and SLC_KEYSTORE_PASSWORD.
+    def ksPath = System.getenv('SLC_KEYSTORE')
+    def ksPass = System.getenv('SLC_KEYSTORE_PASSWORD')
     signingConfigs {
-        // A throwaway key committed to the repo so every build can be installed over the previous one.
-        // This app is for personal use only, so the key is not secret.
-        release {
-            storeFile file('slc.keystore')
-            storePassword 'slopslastcry'
-            keyAlias 'slc'
-            keyPassword 'slopslastcry'
+        if (ksPath && ksPass) {
+            release {
+                storeFile file(ksPath)
+                storeType 'pkcs12'
+                storePassword ksPass
+                keyAlias 'slc'
+                keyPassword ksPass
+            }
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release
-        }
-        debug {
-            signingConfig signingConfigs.release
+            if (ksPath && ksPass) signingConfig signingConfigs.release
         }
     }
 
