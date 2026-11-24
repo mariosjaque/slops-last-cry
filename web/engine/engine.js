@@ -105,12 +105,24 @@
         this.el.addEventListener('error', () => log('audio missing', file));
       }
     }
-    start(fadeIn) {
-      if (!this.el) return this;
+    // The original opens files instantly, so its fades begin with the sound. Here the file may take a
+    // moment to load, so the fade-in (and whatever the new track replaces) waits until playback really
+    // starts; otherwise a short fade would be over before anything is heard.
+    start(fadeIn, onStart) {
+      if (!this.el) { if (onStart) onStart(); return this; }
       this.apply();
+      let begun = false;
+      const begin = () => {
+        if (begun) return; begun = true;
+        if (this.dead || this.stopping) { if (onStart) onStart(); return; }   // stopped before it got going
+        this.fadeTo(this.target, fadeIn);
+        if (onStart) onStart();
+      };
+      this.el.addEventListener('playing', begin, { once: true });
+      setTimeout(begin, 1500);   // never hold the previous track for long if this one is slow or broken
       if (Audio_.suspended) this.held = true;   // the app is in the background: start when it comes back
-      else this.el.play().catch(e => log('play blocked', this.file, e.message));
-      this.fadeTo(this.target, fadeIn); return this;
+      else this.el.play().catch(e => { log('play blocked', this.file, e.message); begin(); });
+      return this;
     }
     fadeTo(v, t, onEnd) { this.fade = { from: this.vol, to: v, t0: performance.now(), dur: Math.max(0, (t || 0) * 1000), onEnd }; if (!t) this.step(performance.now()); }
     stop(t) { if (this.dead) return; if (!t) { this.kill(); return; } this.fadeTo(0, t, () => this.kill()); this.stopping = true; }
@@ -157,23 +169,35 @@
       for (const t of this.fading) if (t.dead) this.fading.delete(t);
     },
     retire(t, time) { if (!t || t.dead) return; t.stop(time); if (!t.dead) this.fading.add(t); },
+    // Original KMViewController playBgm_*: plain play stops the current track at once (unless it is
+    // already fading out) and fades the new one in; crossfade fades the new one in over fadeIn while
+    // the old one fades out over the crossfade time. Both happen when the new track starts sounding.
     play(ch, file, vol, fadeIn, rep, cross) {
       if (ch === 'se') { const t = new Track(file, 'se', vol, rep).start(fadeIn); this.se.add(t); return; }
-      this.retire(this[ch], cross || 0);
-      this[ch] = new Track(file, ch, vol, rep).start(Math.max(fadeIn || 0, cross || 0));
+      const old = this[ch];
+      if (old && !old.dead && !old.stopping) this.fading.add(old);
+      const t = new Track(file, ch, vol, rep);
+      this[ch] = t;
+      t.start(fadeIn || 0, () => { if (old && !old.stopping) this.retire(old, cross || 0); });
     },
     change(ch, file, vol, fadeIn, rep, cross) {
       if (ch === 'se') {
         for (const t of this.se) if (t.file === file && !t.dead && !t.stopping) { t.fadeTo(vol, fadeIn || 0.3); return; }
         return this.play(ch, file, vol, fadeIn, rep, cross);
       }
+      // Original changeBgm_*: if the same file is already playing it only updates the repeat count
+      // (overwriteLoopFromScript) and leaves the volume alone; otherwise it plays the new file.
       const cur = this[ch];
-      if (cur && cur.file === file && !cur.dead && !cur.stopping) { cur.fadeTo(vol, Math.max(fadeIn || 0, cross || 0) || 0.5); return; }
+      if (cur && cur.file === file && !cur.dead && !cur.stopping) {
+        cur.rep = rep; if (cur.el) cur.el.loop = rep === -1 && !cur.loop; return;
+      }
       this.play(ch, file, vol, fadeIn, rep, cross);
     },
     stop(ch, t) {
       if (ch === 'se') { for (const x of this.se) this.retire(x, t); this.se.clear(); return; }
       this.retire(this[ch], t); this[ch] = null;
+      // a track still waiting to be replaced by one that hasn't started yet stops too
+      for (const x of this.fading) if (x.ch === ch && !x.stopping) this.retire(x, t);
     },
     stopAll(t) { this.stop('bgm', t); this.stop('env', t); this.stop('se', t); },
     refresh() { for (const t of [this.bgm, this.env, ...this.se, ...this.fading]) if (t) t.apply(); movie.volume = vol01((S.master / 100) * (S.bgm / 100)); }
