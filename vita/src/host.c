@@ -632,10 +632,10 @@ int main(int argc, char **argv) {
             switch (e.type) {
             case SDL_QUIT: running = 0; break;
             case SDL_FINGERDOWN: case SDL_FINGERMOTION: case SDL_FINGERUP: {
-                int rear = e.tfinger.touchId == 2;
+                if (e.tfinger.touchId == 2) break;   // the rear touchpad is ignored: it is too easy to brush while holding the console
                 float cx, cy;
                 to_canvas(e.tfinger.x, e.tfinger.y, &cx, &cy);
-                send_touch(e.type == SDL_FINGERDOWN ? 0 : e.type == SDL_FINGERMOTION ? 1 : 2, (int)(e.tfinger.fingerId & 0xff), cx, cy, rear);
+                send_touch(e.type == SDL_FINGERDOWN ? 0 : e.type == SDL_FINGERMOTION ? 1 : 2, (int)(e.tfinger.fingerId & 0xff), cx, cy, 0);
                 break; }
 #ifndef __vita__
             case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEMOTION: case SDL_MOUSEBUTTONUP: {

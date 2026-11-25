@@ -949,7 +949,6 @@ const touches = new Map();
 let gesture = null, twoFinger = false;
 function hit(r, x, y) { return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; }
 function onTouch(kind, id, x, y, rear) {
-  if (rear) { rearTouch(kind, id, x, y); return; }
   if (kind === 0) touches.set(id, { x, y, x0: x, y0: y, t0: NOW });
   const t = touches.get(id); if (!t) return;
   if (kind === 0) {
@@ -1035,13 +1034,6 @@ function gameTap(x, y) {
     return;
   }
   if (atBottom(pg)) { if (pg.linear) next(); else focusChoices(); }
-}
-function rearTouch(kind, id, x, y) {
-  // the rear touchpad scrolls the text
-  const st = scrollTarget(); if (!st) return;
-  if (kind === 0) rearTouch.y = y;
-  else if (kind === 1 && rearTouch.y != null) { scrollBy(st, (rearTouch.y - y) * 1.5); rearTouch.y = y; }
-  else rearTouch.y = null;
 }
 function scrollBy(st, d) {
   if (st === cur) { st.scrollY = clamp(st.scrollY + d, 0, maxScroll(st)); sbarT = NOW; }
