@@ -17,3 +17,7 @@ android/local.properties
 *.p12
 *.jks
 *.keystore
+
+vita/build/
+web/setup/vita-harness.html
+vita/js/test.js

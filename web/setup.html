@@ -36,6 +36,9 @@
         <span class="muted">Choose the Slop's Last Cry folder (the one with <code>index.html</code> and <code>setup.html</code>). The converted files are written there.</span><br>
         <button id="pickDir" style="margin-top:.4em">Choose the folder…</button> <span id="dirName" class="muted"></span></div>
       <div class="step"><button id="run" disabled>Convert</button></div>
+      <div class="step"><b>PS Vita (optional)</b>
+        <span class="muted">After converting, this makes a <code>slc-vita</code> folder inside the chosen folder. Copy it to your Vita as <code>ux0:data/slc</code>.</span><br>
+        <button id="vita" disabled style="margin-top:.4em">Make PS Vita files</button></div>
     </div>
     <div id="android" hidden>
       <div class="step" id="obbInfo"></div>
@@ -49,11 +52,12 @@
 </main>
 <script src="setup/alac.js"></script>
 <script src="setup/convert.js"></script>
+<script src="setup/vita.js"></script>
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
   const NATIVE = window.SLCNative || null;
-  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', movies: 'Preparing movies', done: 'Done' };
+  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', movies: 'Preparing movies', 'vita story': 'PS Vita: story', 'vita images': 'PS Vita: pictures', 'vita music': 'PS Vita: sound', 'vita movies': 'PS Vita: movies', done: 'Done' };
   const warns = [];
   function progress(m) {
     if (m.warn) { warns.push(m.warn); $('#warn').textContent = 'Warnings:\n' + warns.join('\n'); return; }
@@ -119,7 +123,7 @@
   if (!window.showDirectoryPicker) { $('#unsupported').hidden = false; return; }
   $('#pc').hidden = false;
   let ipa = null, dir = null;
-  const ready = () => { $('#run').disabled = !(ipa && dir); };
+  const ready = () => { $('#run').disabled = !(ipa && dir); $('#vita').disabled = !dir; };
   const input = document.createElement('input'); input.type = 'file'; input.accept = '.ipa,.obb,.zip';
   input.onchange = () => { ipa = input.files[0] || null; $('#ipaName').textContent = ipa ? ipa.name : ''; ready(); };
   $('#pickIpa').onclick = () => input.click();
@@ -145,6 +149,15 @@
       const i = p.lastIndexOf('/'); const h = await (await dirOf(p.slice(0, i + 1), true)).getFileHandle(p.slice(i + 1), { create: true });
       const w = await h.createWritable(); await w.write(data); await w.close();
     }
+  };
+  $('#vita').onclick = async () => {
+    $('#vita').disabled = $('#run').disabled = true;
+    try {
+      await SLCVita.exportVita(fs, progress);
+      $('#status').innerHTML = '<span class="ok">PS Vita files ready.</span> Copy the <b>slc-vita</b> folder to your Vita as <b>ux0:data/slc</b> (for example with VitaShell over USB or FTP), then install the .vpk.';
+      $('#bar').value = 1;
+    } catch (e) { fail(e); }
+    ready();
   };
   $('#run').onclick = async () => {
     $('#run').disabled = $('#pickIpa').disabled = $('#pickDir').disabled = true;

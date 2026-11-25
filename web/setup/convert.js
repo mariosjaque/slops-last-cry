@@ -194,7 +194,7 @@
     return pcm.channels.map((_, i) => out.getChannelData(i));
   }
   // Encodes 48 kHz float channels as Opus and returns a WebM file.
-  async function encodeOpusWebm(channels) {
+  async function encodeOpusWebm(channels, rawOnly) {
     const rate = 48000, nch = channels.length, total = channels[0].length;
     const packets = []; let head = null, err = null;
     const enc = new AudioEncoder({
@@ -204,7 +204,7 @@
       },
       error: (e) => { err = e; }
     });
-    enc.configure({ codec: 'opus', sampleRate: rate, numberOfChannels: nch, bitrate: 128000 });
+    enc.configure({ codec: 'opus', sampleRate: rate, numberOfChannels: nch, bitrate: 128000, opus: { frameDuration: 20000 } });
     const block = rate;   // feed one second at a time
     for (let s = 0; s < total; s += block) {
       const n = Math.min(block, total - s), planar = new Float32Array(n * nch);
@@ -214,6 +214,7 @@
     }
     await enc.flush(); enc.close();
     if (err) throw err;
+    if (rawOnly) return { packets, head, nch };
     let preSkip = 312;
     if (head && head.length >= 12 && td.decode(head.subarray(0, 8)) === 'OpusHead') preSkip = head[10] | (head[11] << 8);
     if (!head || td.decode(head.subarray(0, 8)) !== 'OpusHead') {
@@ -454,6 +455,6 @@
     log({ step: 'extracting', i: entries.length, n: entries.length });
   }
 
-  const api = { SETUP_VERSION, faststart, convertGame, extractIpa, parseBplist, decodePng, encodePng, decodeAifc, encodeOpusWebm };
+  const api = { SETUP_VERSION, faststart, decodeCompressed, resample, isCgBI, ALAC_TRACKS, convertGame, extractIpa, parseBplist, decodePng, encodePng, decodeAifc, encodeOpusWebm };
   (typeof window !== 'undefined' ? window : globalThis).SLCConvert = api;
 })();
