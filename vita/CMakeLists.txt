@@ -22,21 +22,31 @@ if(NOT SLC_DESKTOP)
   set(VITA_VERSION "01.00")
   set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")   # extended memory for the game's pictures and music
 
+  # QuickJS-ng is not packaged for the Vita: its engine sources (QJS_DIR, a checkout of
+  # quickjs-ng) are compiled straight into the app. Only the core is needed, not quickjs-libc.
+  if(NOT QJS_DIR)
+    set(QJS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/quickjs")
+  endif()
+  add_library(qjs STATIC ${QJS_DIR}/dtoa.c ${QJS_DIR}/libregexp.c ${QJS_DIR}/libunicode.c ${QJS_DIR}/quickjs.c)
+  target_compile_definitions(qjs PRIVATE _GNU_SOURCE)
+  target_compile_options(qjs PRIVATE -O2 -w)
+  target_include_directories(qjs PUBLIC ${QJS_DIR})
+
   add_executable(slc src/host.c)
   target_compile_options(slc PRIVATE -O2 -Wall -Wno-misleading-indentation)
   target_include_directories(slc PRIVATE $ENV{VITASDK}/arm-vita-eabi/include/SDL2 $ENV{VITASDK}/arm-vita-eabi/include/opus)
   # libraries from vdpm; optional ones are only linked when present in this SDK
-  set(SLC_LIBS SDL2_ttf SDL2_image SDL2 freetype harfbuzz png jpeg webpdemux webp sharpyuv bz2 z opus quickjs)
+  set(SLC_LIBS SDL2_ttf SDL2_image SDL2 freetype harfbuzz png jpeg webpdemux webp sharpyuv bz2 z opus)
   set(SLC_LINK "")
   foreach(l ${SLC_LIBS})
     find_library(LIB_${l} ${l})
     if(LIB_${l})
       list(APPEND SLC_LINK ${LIB_${l}})
-    elseif(l MATCHES "^(SDL2|SDL2_ttf|SDL2_image|opus|quickjs|freetype|z)$")
+    elseif(l MATCHES "^(SDL2|SDL2_ttf|SDL2_image|opus|freetype|z)$")
       message(FATAL_ERROR "missing library ${l}")
     endif()
   endforeach()
-  target_link_libraries(slc ${SLC_LINK}
+  target_link_libraries(slc qjs ${SLC_LINK}
     SceAppMgr_stub SceAppUtil_stub SceAudio_stub SceAudioIn_stub SceCommonDialog_stub SceCtrl_stub SceDisplay_stub SceGxm_stub
     SceHid_stub SceIme_stub SceMotion_stub ScePower_stub SceSysmodule_stub SceTouch_stub SceKernelDmacMgr_stub
     m pthread)

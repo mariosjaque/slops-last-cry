@@ -74,7 +74,10 @@ jobs:
           export VITASDK=$HOME/vitasdk PATH=$HOME/vitasdk/bin:$PATH
           git clone --depth 1 https://github.com/vitasdk/vdpm /tmp/vdpm
           cd /tmp/vdpm && ./bootstrap-vitasdk.sh
-          vdpm zlib bzip2 libpng libjpeg-turbo libwebp freetype harfbuzz sdl2 sdl2_ttf sdl2_image opus Quickjs-ng
+          for p in zlib bzip2 libpng libjpeg-turbo libwebp freetype harfbuzz sdl2 sdl2_ttf sdl2_image opus; do
+            vdpm "$p" || { echo "::warning::vdpm package $p not found"; vdpm -Ss "${p%%_*}" || true; }
+          done
+          git clone --depth 1 --branch v0.14.0 https://github.com/quickjs-ng/quickjs "$GITHUB_WORKSPACE/vita/quickjs"
       - name: Build the VPK
         run: |
           cmake -S vita -B vita/build -DCMAKE_BUILD_TYPE=Release

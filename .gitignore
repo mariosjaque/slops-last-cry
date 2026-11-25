@@ -21,3 +21,4 @@ android/local.properties
 vita/build/
 web/setup/vita-harness.html
 vita/js/test.js
+vita/quickjs/
