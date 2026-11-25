@@ -50,7 +50,7 @@ if(NOT SLC_DESKTOP)
     SceAppMgr_stub SceAppUtil_stub SceAudio_stub SceAudioIn_stub SceCommonDialog_stub SceCtrl_stub SceDisplay_stub SceGxm_stub
     SceHid_stub SceIme_stub SceMotion_stub ScePower_stub SceSysmodule_stub SceTouch_stub SceKernelDmacMgr_stub
     m pthread)
-  vita_create_self(eboot.bin slc UNSAFE)
+  vita_create_self(eboot.bin slc)
   vita_create_vpk(slops-last-cry.vpk ${VITA_TITLEID} eboot.bin
     VERSION ${VITA_VERSION}
     NAME ${VITA_APP_NAME}
