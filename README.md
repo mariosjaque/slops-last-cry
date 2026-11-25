@@ -1,9 +1,7 @@
 # Slop's Last Cry
 
 A unofficial port of the iOS game *Banshee's Last Cry* (Aksys Games, 32-bit iOS) to a small web engine,
-so it can be played on PC browsers and on Android.
-
-background music is likely broken
+so it can be played on PC browsers, Android and PS Vita.
 
 **This repository contains no game content.** No text, images, music or fonts from the game are included in the
 code, the web zip or the APK. You need your own copy of the game as an `.ipa` file. On first run, the setup page
@@ -15,13 +13,17 @@ reads that file and converts everything locally, on your own device:
 
 Don't share converted game files.
 
+## Relevant information 
+The original iOS version had HTML files for every dialog page, plus embedded CSS and JavaScript elements. The entire engine was seemingly based on a JavaScript component, so it should be trivial to make an actual human version of this. I was too lazy so I just asked the clanker to do it and gave it access to an emulator so it could check some stuff lol
+
 ## Layout
 
 | Path | What it is |
 | --- | --- |
 | `web/` | The engine (`index.html`, `engine/`) and the first-run converter (`setup.html`, `setup/`). |
 | `android/` | A thin Android wrapper: a full-screen WebView that serves `web/` from the APK and the converted game from the app's private storage. |
-| `.github/workflows/build.yml` | Builds both versions on every push. |
+| `vita/` | A version of the engine that runs on PS Vita using the same assets. |
+| `.github/workflows/build.yml` | Builds all three versions on every push. |
 
 ## Web version (PC)
 
@@ -41,10 +43,20 @@ Don't share converted game files.
 
 Requires Android 8.0 or newer with an up-to-date Android System WebView (Chrome 94+).
 
+## PS Vita version
+
+1. Download `slops-last-cry-vita.vpk` and `slops-last-cry-web.zip` from the latest release and unzip them into a folder.
+2. Open `setup.html` in **Chrome or Edge** (the converter needs WebCodecs and the File System Access API).
+3. Choose your `.ipa`, then choose the unzipped folder. The converter writes the folder `slc-vita/` .
+4. Copy `slc-vita/` as `slc/` to `ux0:/data` on your Vita.
+5. Install the vpk file on your Vita.
+6. Launch the game and you're ready to play.
+   
 ## Building
 
 - **Web:** nothing to build; `web/` is the release. The workflow just zips it.
 - **Android:** JDK 17, Android SDK 34 and Gradle 8.7: `gradle -p android assembleRelease`.
+- **PS Vita:** soon idk
   
 ## Third-party code and fonts
 
@@ -55,4 +67,5 @@ Requires Android 8.0 or newer with an up-to-date Android System WebView (Chrome 
 
 *Banshee's Last Cry* and its content belong to their respective owners. This project is not affiliated with or
 endorsed by them.
+
 The code in this repo was completely made by Claude Opus 5.5, zero lines were made or reviewed by a human.
