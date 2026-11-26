@@ -18,7 +18,7 @@ u32 __stacksize__ = 1024 * 1024;   /* QuickJS needs a deeper stack than the defa
 
 static C3D_RenderTarget *tgt[2];
 static int cur = 0;
-static FILE *logf = NULL;
+static FILE *log_file = NULL;
 
 /* ------------------------------------------------------------------ textures */
 struct GTex { C3D_Tex tex; int w, h, tw, th, fmt; struct GTex *next_free; };
@@ -104,7 +104,7 @@ void gfx_clip(int on, int x, int y, int w, int h) {
 /* ------------------------------------------------------------------ misc */
 double plat_time(void) { return svcGetSystemTick() / (double)SYSCLOCK_ARM11; }
 void plat_log(const char *s) {
-    if (logf) { fputs(s, logf); fputc('\n', logf); fflush(logf); }
+    if (log_file) { fputs(s, log_file); fputc('\n', log_file); fflush(log_file); }
 }
 static LightLock alock;
 void plat_audio_lock(void) { LightLock_Lock(&alock); }
@@ -203,7 +203,7 @@ int main(void) {
     tgt[1] = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
     romfsInit();
     mkdir("sdmc:/3ds", 0777); mkdir("sdmc:/3ds/slc", 0777);
-    logf = fopen("sdmc:/3ds/slc/log.txt", "w");
+    log_file = fopen("sdmc:/3ds/slc/log.txt", "w");
     HIDUSER_EnableAccelerometer();
     aptHook(&hook, apt_cb, NULL);
     audio_init();
@@ -251,7 +251,7 @@ int main(void) {
     core_shutdown();
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW); free_pending(); C3D_FrameEnd(0);
     aptUnhook(&hook);
-    if (logf) fclose(logf);
+    if (log_file) fclose(log_file);
     romfsExit();
     C2D_Fini(); C3D_Fini(); gfxExit();
     return 0;

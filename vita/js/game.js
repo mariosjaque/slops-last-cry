@@ -1453,7 +1453,7 @@ function openSettings() {
     { head: 'Port-specific settings' },
     { label: 'Vibration', detail: fxLabels[S.fx], fn: () => push(choice('Vibration', 'fx', [['shake', 'Screen shake'], ['off', 'Off']])) },
     DUAL ? { label: 'Text screen', detail: S.ts === 'bottom' ? 'Touch screen' : 'Top screen', fn: () => push(choice('Text screen', 'ts', [['top', 'Top screen'], ['bottom', 'Touch screen']], () => { updTH(); relayoutAll(); })) } : null,
-    DUAL ? { label: 'Holding the 3DS', detail: S.rot === 270 ? 'Top screen right' : 'Top screen left', fn: () => push(choice('Holding the 3DS', 'rot', [[90, 'Top screen left'], [270, 'Top screen right']], () => host.setRotation(S.rot))) }
+    DUAL ? { label: 'Top screen side', detail: S.rot === 270 ? 'Right' : 'Left', fn: () => push(choice('Top screen side', 'rot', [[90, 'Left'], [270, 'Right']], () => host.setRotation(S.rot))) }
       : { label: 'Screen orientation', detail: S.rot === 270 ? 'Rotate left' : 'Rotate right', fn: () => push(choice('Screen orientation', 'rot', [[90, 'Rotate right'], [270, 'Rotate left']], () => host.setRotation(S.rot))) },
     { label: 'Back up saves', fn: backupSaves },
     { label: 'Restore saves', fn: restoreSaves },
