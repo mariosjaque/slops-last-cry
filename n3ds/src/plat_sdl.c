@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     if (adev) SDL_PauseAudioDevice(adev, 0);
     if (!core_init(scripts, nscripts, 0)) return 1;
 
-    double last = plat_time();
+    double last = plat_time(), prof_t = 0; long prof_n = 0;
     int down = 0;
     while (core_running) {
         SDL_Event e;
@@ -149,7 +149,9 @@ int main(int argc, char **argv) {
         double now = plat_time(), dt = now - last; last = now;
         for (int s = 0; s < 2; s++) { SDL_SetRenderTarget(ren, scr[s]); SDL_SetRenderDrawColor(ren, 0, 0, 0, 255); SDL_RenderClear(ren); }
         gfx_target(0);
+        double f0 = plat_time();
         core_frame(dt, 0, 0, 0, 0);
+        prof_t += plat_time() - f0; prof_n++;
         SDL_SetRenderTarget(ren, NULL);
         SDL_SetRenderDrawColor(ren, 40, 40, 44, 255);
         SDL_RenderClear(ren);
@@ -163,6 +165,7 @@ int main(int argc, char **argv) {
         SDL_RenderPresent(ren);
         SDL_Delay(14);
     }
+    if (getenv("SLC_PROFILE")) SDL_Log("frame: %.2f ms average over %ld frames", prof_t * 1000 / (prof_n ? prof_n : 1), prof_n);
     core_shutdown();
     if (adev) SDL_CloseAudioDevice(adev);
     SDL_Quit();
