@@ -27,7 +27,7 @@ $(BUILD)/%.o: src/%.c src/core.h | $(BUILD)
 	$(CC) $(CFLAGS) -Wall -Wno-unused-function -c $< -o $@
 
 $(BUILD)/qjs_%.o: $(QJS)/%.c | $(BUILD)
-	$(CC) $(CFLAGS) -D_GNU_SOURCE -w -c $< -o $@
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -w -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -c $< -o $@
 
 $(BUILD)/$(TARGET).elf: $(APP_OBJS) $(QJS_OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
