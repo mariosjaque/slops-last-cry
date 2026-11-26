@@ -1,7 +1,7 @@
 # Slop's Last Cry
 
 A unofficial port of the iOS game *Banshee's Last Cry* (Aksys Games, 32-bit iOS) to a small web engine,
-so it can be played on PC browsers, Android, PS Vita and New 3DS.
+so it can be played on PC browsers, Android, PS Vita, New 3DS and jailbroken Kindles.
 
 **This repository contains no game content.** No text, images, music or fonts from the game are included in the
 code, the web zip or the APK. You need your own copy of the game as an `.ipa` file. On first run, the setup page
@@ -63,6 +63,16 @@ Settings has **Text screen** (top or touch screen) and **Top screen side** (left
 3. Copy `slc-3ds/` as `slc/` to `3ds/` on your SD card (so the files are in `sdmc:/3ds/slc/`), and `slops-last-cry.3dsx` to `3ds/`.
 4. Start it from the Homebrew Launcher. Sound needs `sdmc:/3ds/dspfirm.cdc` (Luma3DS: Rosalina menu > Miscellaneous options > Dump DSP firmware).
    
+## Kindle version
+
+A plain e-ink reader for jailbroken Kindles with KUAL (made for the Paperwhite 3, firmware 5.12 or newer):
+grayscale pictures behind white text, no sound and no animations. Tap the right side to read on, the left side to go back,
+and the middle for the menu (Table of Contents, saves, settings). Movies show a still frame.
+
+1. Open `setup.html` from the web zip in **Chrome or Edge**, choose your `.ipa` and the unzipped folder, then press **Make Kindle files**.
+2. Copy `slc-kindle/` to the Kindle as `extensions/slopslastcry/` (the KUAL `extensions` folder).
+3. Open KUAL and choose **Slop's Last Cry**. The first start registers the app with the Kindle; saves are kept on the Kindle.
+
 ## Building
 
 - **Web:** nothing to build; `web/` is the release. The workflow just zips it.

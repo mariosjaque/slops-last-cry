@@ -42,6 +42,9 @@
       <div class="step"><b>New 3DS (optional)</b>
         <span class="muted">After converting, this makes a <code>slc-3ds</code> folder inside the chosen folder. Copy it to your SD card as <code>3ds/slc</code>.</span><br>
         <button id="n3ds" disabled style="margin-top:.4em">Make 3DS files</button></div>
+      <div class="step"><b>Kindle (optional, jailbroken with KUAL)</b>
+        <span class="muted">After converting, this makes a <code>slc-kindle</code> folder inside the chosen folder: a KUAL extension with grayscale pictures and no sound. Copy it to the Kindle as <code>extensions/slopslastcry</code>.</span><br>
+        <button id="kindle" disabled style="margin-top:.4em">Make Kindle files</button></div>
     </div>
     <div id="android" hidden>
       <div class="step" id="obbInfo"></div>
@@ -57,11 +60,12 @@
 <script src="setup/convert.js"></script>
 <script src="setup/vita.js"></script>
 <script src="setup/n3ds.js"></script>
+<script src="setup/kindle.js"></script>
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
   const NATIVE = window.SLCNative || null;
-  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', movies: 'Preparing movies', 'vita story': 'PS Vita: story', 'vita images': 'PS Vita: pictures', 'vita music': 'PS Vita: sound', 'vita movies': 'PS Vita: movies', '3ds story': '3DS: story', '3ds images': '3DS: pictures', '3ds music': '3DS: sound', '3ds movies': '3DS: movies', done: 'Done' };
+  const LABELS = { extracting: 'Extracting the game files', images: 'Converting images', 'engine images': 'Preparing interface images', 'story data': 'Reading the story', music: 'Converting music', movies: 'Preparing movies', 'vita story': 'PS Vita: story', 'vita images': 'PS Vita: pictures', 'vita music': 'PS Vita: sound', 'vita movies': 'PS Vita: movies', '3ds story': '3DS: story', '3ds images': '3DS: pictures', '3ds music': '3DS: sound', '3ds movies': '3DS: movies', 'kindle story': 'Kindle: story', 'kindle images': 'Kindle: pictures', 'kindle movies': 'Kindle: movie stills', done: 'Done' };
   const warns = [];
   function progress(m) {
     if (m.warn) { warns.push(m.warn); $('#warn').textContent = 'Warnings:\n' + warns.join('\n'); return; }
@@ -127,7 +131,7 @@
   if (!window.showDirectoryPicker) { $('#unsupported').hidden = false; return; }
   $('#pc').hidden = false;
   let ipa = null, dir = null;
-  const ready = () => { $('#run').disabled = !(ipa && dir); $('#vita').disabled = $('#n3ds').disabled = !dir; };
+  const ready = () => { $('#run').disabled = !(ipa && dir); $('#vita').disabled = $('#n3ds').disabled = $('#kindle').disabled = !dir; };
   const input = document.createElement('input'); input.type = 'file'; input.accept = '.ipa,.obb,.zip';
   input.onchange = () => { ipa = input.files[0] || null; $('#ipaName').textContent = ipa ? ipa.name : ''; ready(); };
   $('#pickIpa').onclick = () => input.click();
@@ -168,6 +172,15 @@
     try {
       await SLC3DS.export3ds(fs, progress);
       $('#status').innerHTML = '<span class="ok">3DS files ready.</span> Copy the <b>slc-3ds</b> folder to your SD card as <b>3ds/slc</b>, and <b>slops-last-cry.3dsx</b> to <b>3ds/</b>, then start it from the Homebrew Launcher.';
+      $('#bar').value = 1;
+    } catch (e) { fail(e); }
+    ready();
+  };
+  $('#kindle').onclick = async () => {
+    $('#kindle').disabled = $('#n3ds').disabled = $('#vita').disabled = $('#run').disabled = true;
+    try {
+      await SLCKindle.exportKindle(fs, progress);
+      $('#status').innerHTML = '<span class="ok">Kindle files ready.</span> Copy the <b>slc-kindle</b> folder to your Kindle as <b>extensions/slopslastcry</b>, then open KUAL and choose <b>Slop\'s Last Cry</b>.';
       $('#bar').value = 1;
     } catch (e) { fail(e); }
     ready();

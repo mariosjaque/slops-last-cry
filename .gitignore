@@ -27,3 +27,4 @@ n3ds/quickjs/
 n3ds/stb/
 n3ds/*.3dsx
 web/setup/n3ds-harness.html
+web/setup/kindle-harness.html
