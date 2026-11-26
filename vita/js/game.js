@@ -1,11 +1,27 @@
 /*
- * Slop's Last Cry for PS Vita: the game engine (run by QuickJS inside host.c).
- * A port of the web engine (web/engine/engine.js) to an immediate-mode canvas: the portrait 544x960
- * screen is redrawn every frame from the state kept here. The original scene scripts run unchanged
+ * Slop's Last Cry for PS Vita and New 3DS: the game engine (run by QuickJS inside the native host).
+ * A port of the web engine (web/engine/engine.js) to an immediate-mode canvas: the portrait screen(s)
+ * are redrawn every frame from the state kept here. The original scene scripts run unchanged
  * against the same "km" bridge the iOS app gave them.
+ *
+ * Vita: one portrait 544x960 canvas.
+ * 3DS (host.dual): the console is held like a book and each screen is a portrait canvas, 360 units
+ * wide (the host scales them to the real 240 pixels). One screen shows the story text, the other the
+ * scene's picture; menus, choices and everything else you touch are on the touch screen.
  */
 'use strict';
-const W = 544, H = 960;
+const DUAL = !!host.dual;
+const W = DUAL ? 360 : 544;
+const SCR = DUAL ? [[360, 600], [360, 480]] : [[544, 960]];   // [top, touch screen] on the 3DS
+const UI = DUAL ? 1 : 0;                                        // the screen you touch
+let H = SCR[0][1];    // height of the screen being drawn (menus are laid out with it)
+let TH = H;           // height of the screen that shows the story text
+let regionsOn = true; // tap regions only come from the touch screen
+const PLATFORM = DUAL ? '3DS' : 'Vita';
+function textScr() { return DUAL && S && S.ts === 'bottom' ? 1 : 0; }
+function apart() { return DUAL && textScr() !== UI; }          // choices go on the touch screen, apart from the text
+function updTH() { TH = SCR[textScr()][1]; }
+function useScr(i) { H = SCR[i][1]; regionsOn = i === UI; if (DUAL) host.target(i); }
 const DATA = host.dataDir, APPD = host.appDir;
 let NOW = 0;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -64,11 +80,12 @@ function img(key) {
   if (!key) return null;
   let e = IMG.get(key);
   if (!e) {
-    const id = host.loadImage(DATA + 'img/' + key, 1024);
+    const lg = D.imgsize && D.imgsize[key];   // the 3DS files are scaled down; layout uses the original size
+    const id = host.loadImage(DATA + 'img/' + key, 1024, lg ? lg[0] : 0, lg ? lg[1] : 0);
     if (id < 0) { e = { id: -1, w: 0, h: 0 }; }
     else { const sz = host.imageSize(id); e = { id, w: sz[0], h: sz[1] }; }
     IMG.set(key, e);
-    if (IMG.size > 40) {   // keep texture memory down: drop the least recently used pictures
+    if (IMG.size > (host.imgCache || 40)) {   // keep texture memory down: drop the least recently used pictures
       const old = Array.from(IMG.entries()).filter(([k, v]) => k !== key && v.id > 0 && NOW - v.used > 5).sort((a, b) => a[1].used - b[1].used).slice(0, 10);
       for (const [k, v] of old) { host.freeImage(v.id); IMG.delete(k); }
     }
@@ -113,26 +130,34 @@ function font(fam, b, i, px) {
 function tw(f, s) { let w = f.wcache.get(s); if (w == null) { w = host.textWidth(f.id, s); if (f.wcache.size < 4000) f.wcache.set(s, w); } return w; }
 function text(f, s, x, y, col, a, shadow) { host.drawText(f.id, s, x, y, col[0], col[1], col[2], a == null ? 1 : a, shadow || 0); }
 const WHITE = [255, 255, 255];
-function uiFont(px, b, i) { return font('m', b, i, px); }
+const UIS = DUAL ? 1.15 : 1;   // menu text a little larger on the 3DS's low-density screens
+function uiFont(px, b, i) { return font('m', b, i, px * UIS); }
 function centerText(f, s, cx, y, col, a, sh) { text(f, s, cx - tw(f, s) / 2, y, col || WHITE, a, sh); }
 function wrapText(f, s, w) {
   const out = []; let line = '';
   for (const para of String(s).split('\n')) {
     line = '';
-    for (const word of para.split(' ')) { const t = line ? line + ' ' + word : word; if (line && tw(f, t) > w) { out.push(line); line = word; } else line = t; }
+    for (let word of para.split(' ')) {
+      const t = line ? line + ' ' + word : word;
+      if (line && tw(f, t) > w) { out.push(line); line = word; } else line = t;
+      while (tw(f, line) > w && line.length > 1) {   // a word too long for the line (a file path): break it
+        let k = line.length - 1; while (k > 1 && tw(f, line.slice(0, k)) > w) k--;
+        out.push(line.slice(0, k)); line = line.slice(k);
+      }
+    }
     out.push(line);
   }
   return out;
 }
 
 // ---------- settings and progress (same keys and defaults as the web version) ----------
-const DEF = { size: 5, font: 'm', bgb: 70, textb: 100, gore: 1, dir: 'R', master: 100, bgm: 90, env: 80, se: 100, fx: 'shake', rot: 90 };
+const DEF = { size: 5, font: 'm', bgb: 70, textb: 100, gore: 1, dir: 'R', master: 100, bgm: 90, env: 80, se: 100, fx: 'shake', rot: 90, ts: 'top' };
 let S, G, visited, chapSeen, flags, names;
 const LOCAL = /^(local_|flag_from_|flag_name_|_main_$|flag_mc4030_1time$)/;
 function loadProgress() {
   S = Object.assign({}, DEF, LS.get('settings', {}));
-  if (S.fx === 'vibrate') S.fx = 'shake';   // the Vita has no vibration motor
-  host.setRotation(S.rot);
+  if (S.fx === 'vibrate') S.fx = 'shake';   // neither console has a vibration motor
+  host.setRotation(S.rot); updTH();
   G = Object.assign({ flags: {}, visited: [], chapters: [] }, LS.get('global', {}));
   visited = new Set(G.visited); chapSeen = G.chapters.slice();
   flags = Object.assign({}, G.flags);
@@ -152,9 +177,10 @@ function setLocalFlags(o) { for (const k in flags) if (LOCAL.test(k)) delete fla
 
 // ---------- audio (web Track semantics on top of the host mixer) ----------
 const SND = new Map();
+const SNDEXT = host.sndExt || '.slco', RATE = host.audioRate || 48000;
 function snd(file) {
   let e = SND.get(file);
-  if (!e) { e = { id: host.sndLoad(DATA + 'audio/' + file + '.slco'), used: NOW }; SND.set(file, e); }
+  if (!e) { e = { id: host.sndLoad(DATA + 'audio/' + file + SNDEXT), used: NOW }; SND.set(file, e); }
   e.used = NOW;
   return e.id;
 }
@@ -170,7 +196,7 @@ class Track {
     this.ownSid = path ? sid : 0;
     let lp = D.loops[file.replace(/\.\w+$/, '')];
     if (lp && !(lp[1] > lp[0] && lp[0] >= 0)) lp = null;
-    const ls = lp ? Math.round(lp[0] * 48000 / lp[2]) : 0, le = lp ? Math.round(lp[1] * 48000 / lp[2]) : 0;
+    const ls = lp ? Math.round(lp[0] * RATE / lp[2]) : 0, le = lp ? Math.round(lp[1] * RATE / lp[2]) : 0;
     if (sid > 0) this.voice = host.play(sid, 0, ls, le, rep);
     if (this.voice < 0) this.dead = true;
   }
@@ -236,14 +262,14 @@ function setBgImage(name) {
   BG.prev = BG.cur; BG.cur = { key };
   BG.fade.set(0).to(1, bgInstant ? 0 : bgFadeDur);
 }
-function drawBgLayer(layer, T, a, dx) {
+function drawBgLayer(layer, T, a, dx, dy) {
   if (!layer || a <= 0) return;
   const e = img(layer.key); if (!e) return;
   const sx = T.sx.v, sy = T.sy.v, s = Math.max(W / e.w, H / e.h);
   const bw = e.w * s * sx, bh = e.h * s * sy;
   const ox = W * T.cx, oy = H * T.cy;
   const x = ox + (-W * T.cx + (W - e.w * s) / 2) * sx + T.x.v * W + (dx || 0);
-  const y = oy + (-H * T.cy + (H - e.h * s) / 2) * sy + T.y.v * H;
+  const y = oy + (-H * T.cy + (H - e.h * s) / 2) * sy + T.y.v * H + (dy || 0);
   host.drawImage(e.id, 0, 0, e.w, e.h, x, y, bw, bh, a, T.rot.v, ox - x, oy - y);
 }
 const MOV = { id: -1, img: -1, t0: 0, fps: 15, n: 0, w: 0, h: 0, rep: 0, track: null, file: '' };
@@ -255,7 +281,7 @@ function playMovie(file, rep) {
   const id = host.movieOpen(DATA + 'movies/' + file + '.slcm'); if (id < 0) return;
   const inf = host.movieInfo(id);
   Object.assign(MOV, { id, t0: NOW, fps: inf[0], n: inf[1], w: inf[2], h: inf[3], rep, file });
-  MOV.track = new Track(file, 'bgm', 1, rep === -1 ? -1 : 0, DATA + 'movies/' + file + '.slco').start(0);
+  MOV.track = new Track(file, 'bgm', 1, rep === -1 ? -1 : 0, DATA + 'movies/' + file + SNDEXT).start(0);
   if (MOV.track.dead) MOV.track = null;
 }
 function stopMovie() { if (MOV.id >= 0) host.movieClose(MOV.id); if (MOV.track) MOV.track.kill(); MOV.id = -1; MOV.track = null; MOV.file = ''; }
@@ -275,7 +301,7 @@ function shakeOffset() {
 
 // ---------- text layout ----------
 function sizeMul() { const v = +S.size; return v >= 1 && v <= 10 ? 1 + (v - 5) * 0.1 : 1; }
-function fontPx() { return Math.round(Math.max(16, W * 0.045) * sizeMul()); }
+function fontPx() { return Math.round(Math.max(16, W * (DUAL ? 0.055 : 0.045)) * sizeMul()); }
 const PAD_X = Math.round(W * 0.08), PAD_T = Math.round(W * 0.07), CONTENT_W = W - PAD_X * 2;
 function styleOf(c) {
   const st = { size: 1, col: null, align: 'left', mt: 0, mb: 1, pad: 0, ml: 0, b: 0, mbPx: 0 };
@@ -492,7 +518,7 @@ function elementProxy(pg, id) {
 }
 function compileScript(pg) {
   const doc = {
-    get height() { return Math.round((pg.lay ? pg.lay.height + H * 0.3 : H) * 320 / W); },
+    get height() { return Math.round((pg.lay ? pg.lay.height + TH * 0.3 : TH) * 320 / W); },
     getElementById: (id) => elementProxy(pg, id),
     addEventListener: (type, fn) => { if (type === 'touchstart') pg.touchHandlers.push(fn); },
     write: () => { }, body: {}
@@ -531,7 +557,7 @@ function goto(id, opt) {
   } else T_OLD.pg = null;
   if (opt.slide && prev && !opt.wipe) {
     T_OLD.kind = 'slide'; T_OLD.d = (opt.back ? -1 : 1) * (S.dir === 'L' ? -1 : 1);
-    BG.slide.set(T_OLD.d * W); bgInstant = true;
+    BG.slide.set(T_OLD.d); bgInstant = true;   // in screen widths
     mount(id, opt);
     return;
   }
@@ -607,16 +633,36 @@ function reveal(pg) {
   applyDim(0.3); pg.textA.to(1, 0.3);
 }
 function relayout(pg) {
+  updTH();
   // keep the first lines clear of the BRANCH icon on pages with choices
   const hasChoices = pg.blocks.some(b => b.k === 'ul' && b.items.some(it => !/^returnStart/.test(it.sel)));
   let top = PAD_T;
   if (hasChoices) { const b = eimg('branch.png'), bw = Math.min(W * 0.15, 110); if (b) top = Math.max(top, 12 + b.h * bw / b.w + 10); }
-  pg.lay = layout(pg.blocks, { top });
-  pg.choices = [];
-  for (const it of pg.lay.items) if (it.kind === 'box') pg.choices.push(it);
+  const sep = apart();
+  pg.lay = layout(sep ? pg.blocks.filter(b => b.k !== 'ul') : pg.blocks, { top });
+  pg.choices = []; pg.clay = null;
+  if (sep) {
+    const ul = pg.blocks.filter(b => b.k === 'ul');
+    if (ul.length) { pg.clay = layoutChoices(ul); for (const it of pg.clay.items) if (it.kind === 'box') pg.choices.push(it); }
+  } else for (const it of pg.lay.items) if (it.kind === 'box') pg.choices.push(it);
   pg.linear = pg.choices.length === 0;
   pg.dirty = false;
   pg.scrollY = clamp(pg.scrollY, 0, maxScroll(pg));
+}
+// 3DS with the text on the top screen: the choices are laid out on their own, centred on the touch screen.
+function layoutChoices(ul) {
+  const HU = SCR[UI][1];
+  let lay = null;
+  for (const m of [1, 0.9, 0.8, 0.7]) {
+    lay = layout(ul, { top: 0, px: Math.round(fontPx() * m) });
+    let b = 0; for (const it of lay.items) if (it.kind === 'box') b = Math.max(b, it.y + it.h);
+    lay.bottom = b; if (b <= HU - 20) break;
+  }
+  let t = Infinity; for (const it of lay.items) t = Math.min(t, it.y);
+  const off = Math.round((HU - (lay.bottom - t)) / 2 - t);
+  for (const it of lay.items) it.y += off;
+  lay.height = HU;
+  return lay;
 }
 function ctxNext(pg) {
   const c = pg.ctx, s = c && seqOf(c.chap);
@@ -675,10 +721,11 @@ function pickChoice(box) {
 function focusChoices() {
   const pg = cur; if (!pg || !pg.choices.length) return;
   if (pg.focus < 0) pg.focus = 0;
+  if (apart()) { pg.scroll.target = maxScroll(pg); return; }
   const b = pg.choices[pg.focus];
-  pg.scroll.target = clamp(b.y - H * 0.4, 0, maxScroll(pg));
+  pg.scroll.target = clamp(b.y - TH * 0.4, 0, maxScroll(pg));
 }
-function maxScroll(pg) { return Math.max(0, (pg.lay ? pg.lay.height : 0) + H * 0.3 - H); }
+function maxScroll(pg) { return Math.max(0, (pg.lay ? pg.lay.height : 0) + TH * 0.3 - TH); }
 function atBottom(pg) { return pg.scrollY >= maxScroll(pg) - 6; }
 
 // ---------- saving ----------
@@ -755,11 +802,14 @@ function titleButtons() {
     { label: 'Settings', fn: () => openSettings() }
   ];
 }
-function drawTitle() {
+// part: 'all' (Vita), 'art' (3DS top screen: picture and logo) or 'menu' (3DS touch screen: buttons)
+function drawTitle(part) {
+  part = part || 'all';
   const t = NOW - title.t0;
   const st = clamp(t / 0.5, 0, 1);
   drawCover(img(imgKey('s_house.jpg')), 0, 0, W, H, st);
-  const lg = eimg('titlelogo.png');
+  if (part === 'menu') host.fillRect(0, 0, W, H, 0, 0, 0, 0.35 * st);
+  const lg = part === 'menu' ? null : eimg('titlelogo.png');
   if (lg) {
     const p = clamp((t - 0.5) / 1.5, 0, 1), lw = W, lh = lg.h * W / lg.w, ly = H * 0.39 - lh / 2;
     const vis = p * 1.25 * lw;   // soft-edged wipe from the left
@@ -773,9 +823,11 @@ function drawTitle() {
     const solid = clamp(vis - lw * 0.25, 0, lw);
     if (solid > 0) host.drawImage(lg.id, 0, 0, solid * lg.w / lw, lg.h, 0, ly, solid, lh, st);
   }
+  if (part === 'art') return;
   const cp = eimg('title_copyright.png'); if (cp) drawFit(cp, W * 0.15, H * 0.955, W * 0.7, H * 0.03, 0.8 * st);
   const ma = clamp((t - 2.0) / 1, 0, 1);
-  const bs = titleButtons(), bw = W * 0.8, bh = 58, gap = 12, by0 = H - H * 0.09 - bs.length * (bh + gap);
+  const bs = titleButtons(), bw = W * 0.8, bh = 58, gap = 12;
+  const by0 = part === 'menu' ? (H - bs.length * (bh + gap)) / 2 : H - H * 0.09 - bs.length * (bh + gap);
   bs.forEach((b, i) => {
     const r = { x: (W - bw) / 2, y: by0 + i * (bh + gap), w: bw, h: bh };
     menuButton(r, b.label, ma * (b.off ? 0.35 : 1), title.focus === i);
@@ -797,11 +849,11 @@ function drawNames() {
   drawCover(img(imgKey('s_house.jpg')), 0, 0, W, H, 1);
   host.fillRect(0, 0, W, H, 0, 0, 0, 0.55);
   if (namesSt.help) { drawHelpPage('howtoplay_intro', namesSt.helpT); return; }
-  const f = uiFont(22), fb = uiFont(30), fs = uiFont(18);
-  centerText(fs, STR.NameInput_Title || 'Main characters', W / 2, H * 0.2, [220, 220, 220], 1, 0.6);
+  const f = uiFont(22), fb = uiFont(30), fs = uiFont(18), small = H < 700;
+  centerText(fs, STR.NameInput_Title || 'Main characters', W / 2, small ? H * 0.06 : H * 0.2, [220, 220, 220], 1, 0.6);
   const rows = [[STR.NameInput_MainLabel || 'You', 'main'], [STR.NameInput_SubLabel || 'Your girlfriend', 'sub']];
   rows.forEach(([lab, k], i) => {
-    const y = H * 0.3 + i * 150;
+    const y = small ? H * 0.15 + i * Math.round(H * 0.26) : H * 0.3 + i * 150;
     centerText(fs, lab, W / 2, y, [200, 200, 200], 1, 0.6);
     const r = { x: W * 0.15, y: y + 32, w: W * 0.7, h: 64 };
     host.roundRect(r.x, r.y, r.w, r.h, 8, 17, 28, 60, 0.85);
@@ -811,7 +863,8 @@ function drawNames() {
     region(r, () => editName(k));
   });
   const bw = W * 0.8;
-  const r1 = { x: (W - bw) / 2, y: H * 0.72, w: bw, h: 58 }, r2 = { x: (W - bw) / 2, y: H * 0.72 + 72, w: bw, h: 58 };
+  const by = small ? H - 2 * 60 - 12 : H * 0.72, bh = small ? 52 : 58, bg = small ? 60 : 72;
+  const r1 = { x: (W - bw) / 2, y: by, w: bw, h: bh }, r2 = { x: (W - bw) / 2, y: by + bg, w: bw, h: bh };
   menuButton(r1, STR.NameInput_Start || 'Use these names', 1, namesSt.focus === 2); region(r1, startNew);
   menuButton(r2, STR.NameInput_Back || 'Return to Title Screen', 1, namesSt.focus === 3); region(r2, () => { screen = 'title'; title.focus = 0; });
   void t; void f;
@@ -826,7 +879,7 @@ function startNew() {
 function drawHelpPage(key, t0, opt) {
   opt = opt || {};
   const st = namesSt && key === 'howtoplay_intro' ? namesSt : helpSt;
-  if (!st.helpLay) st.helpLay = layout(D.help[key] || [], { px: 19, top: 60 });
+  if (!st.helpLay) st.helpLay = layout(D.help[key] || [], { px: DUAL ? 21 : 19, top: 60 });
   const a = opt.leaving != null ? opt.leaving : clamp((NOW - t0) / 0.5, 0, 1);
   host.fillRect(0, 0, W, H, 0, 0, 0, 0.85 * a);
   drawLayout(st.helpLay, st.helpScroll || 0, a, null);
@@ -864,10 +917,10 @@ function drawLayout(lay, scrollY, a, pg) {
   }
 }
 function hexCol(c) { if (Array.isArray(c)) return c; const m = String(c).match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : WHITE; }
-function drawChoiceAnim(pg) {
+function drawChoiceAnim(pg, scrollY) {
   const A = pg.choiceAnim; if (!A) return;
   const box = A.box, t = NOW - A.t0;
-  const p = easeOut(clamp(t / 0.4, 0, 1)), y0 = box.y - pg.scrollY;
+  const p = easeOut(clamp(t / 0.4, 0, 1)), y0 = box.y - (scrollY != null ? scrollY : pg.scrollY);
   const scale = 1 + (Math.max(1, Math.min(1.6, W * 0.84 / box.w)) - 1) * p;
   const cx = box.x + box.w / 2, cy = y0 + box.h / 2, tx = W / 2, ty = H * 0.5;
   const x = cx + (tx - cx) * p, y = cy + (ty - cy) * p;
@@ -880,48 +933,59 @@ function drawChoiceAnim(pg) {
   for (const it of lay.items) if (it.kind === 'line') for (const s of it.segs) text(s.f, s.s, x - bw / 2 + 18 * scale + s.x, y - lh / 2 + it.y + it.base, WHITE, a * vol01(S.textb / 100), 0.7);
   void fam;
 }
-function drawGame() {
+// opt.text: this screen shows the story text (dimmed picture behind it); otherwise only the picture.
+// opt.ui: this is the screen you touch (choices apart from the text, the ??? button).
+function drawGame(opt) {
+  opt = opt || { text: true, ui: true };
   const [sx, sy] = shakeOffset();
-  void sx; void sy;
-  const pg = cur;
+  const pg = cur, txt = opt.text, here = apart() && opt.ui && !txt;
+  const dimOf = (v) => txt ? v : 0;
   // old page (transition)
   if (T_OLD.pg && T_OLD.kind === 'slide') {
-    drawBgLayer(T_OLD.bg, T_OLD.T, 1);
-    host.fillRect(0, 0, W, H, 0, 0, 0, T_OLD.dim);
+    drawBgLayer(T_OLD.bg, T_OLD.T, 1, sx, sy);
+    host.fillRect(0, 0, W, H, 0, 0, 0, dimOf(T_OLD.dim));
     host.fillRect(0, 0, W, H, 0, 0, 0, T_OLD.bright || 0);
-    drawLayout(T_OLD.pg.lay, T_OLD.pg.scrollY, T_OLD.textA, T_OLD.pg);
-    const dx = BG.slide.v;
+    if (txt) drawLayout(T_OLD.pg.lay, T_OLD.pg.scrollY - sy, T_OLD.textA, T_OLD.pg);
+    const dx = BG.slide.v * W;
     host.clip(Math.max(0, Math.round(dx)), 0, W, H);
     host.fillRect(dx, 0, W, H, 0, 0, 0, 1);
-    drawBgLayer(BG.cur, BG.T, 1, dx);
+    drawBgLayer(BG.cur, BG.T, 1, dx + sx, sy);
     host.clip();
   } else {
-    if (BG.prev && BG.fade.v < 1 && !(T_OLD.pg && T_OLD.kind === 'fade')) drawBgLayer(BG.prev, BG.T, 1);
-    drawBgLayer(BG.cur, BG.T, BG.prev && !(T_OLD.pg && T_OLD.kind === 'fade') ? BG.fade.v : 1);
+    if (BG.prev && BG.fade.v < 1 && !(T_OLD.pg && T_OLD.kind === 'fade')) drawBgLayer(BG.prev, BG.T, 1, sx, sy);
+    drawBgLayer(BG.cur, BG.T, BG.prev && !(T_OLD.pg && T_OLD.kind === 'fade') ? BG.fade.v : 1, sx, sy);
     if (BG.fade.done) BG.prev = null;
     drawMovie();
-    host.fillRect(0, 0, W, H, 0, 0, 0, dim.v);
+    host.fillRect(0, 0, W, H, 0, 0, 0, dimOf(dim.v));
     host.fillRect(0, 0, W, H, 0, 0, 0, bright.v);
     if (pg) {
-      const pull = pg.pull || (pg.pullAnim ? pg.pullAnim.v : 0);
-      drawLayout(pg.lay, pg.scrollY + pull, pg.textA.v, pg);
-      if (pg.branch && pg.textA.v > 0) { const b = eimg('branch.png'); if (b) { const bw = Math.min(W * 0.15, 110); drawImg(b, W - bw - 12, 12, bw, b.h * bw / b.w, pg.textA.v); } }
-      drawChoiceAnim(pg);
-      drawEndMarker(pg);
-      drawScrollbar(pg);
+      if (txt) {
+        const pull = pg.pull || (pg.pullAnim ? pg.pullAnim.v : 0);
+        drawLayout(pg.lay, pg.scrollY + pull - sy, pg.textA.v, pg);
+        if (pg.branch && pg.textA.v > 0) { const b = eimg('branch.png'); if (b) { const bw = Math.min(W * 0.15, 110); drawImg(b, W - bw - 12, 12, bw, b.h * bw / b.w, pg.textA.v); } }
+        if (!apart()) drawChoiceAnim(pg);
+        drawEndMarker(pg);
+        drawScrollbar(pg);
+      }
+      if (here && pg.clay && pg.revealed) {
+        const a = pg.textA.v;
+        host.fillRect(0, 0, W, H, 0, 0, 0, 0.45 * a);
+        drawLayout(pg.clay, 0, a, pg);
+        drawChoiceAnim(pg, 0);
+      }
     }
     if (T_OLD.pg && T_OLD.kind === 'fade') {
       const a = T_OLD.a.v;
       if (a > 0) {
-        drawBgLayer(T_OLD.bg, T_OLD.T, a);
-        host.fillRect(0, 0, W, H, 0, 0, 0, T_OLD.dim * a);
+        drawBgLayer(T_OLD.bg, T_OLD.T, a, sx, sy);
+        host.fillRect(0, 0, W, H, 0, 0, 0, dimOf(T_OLD.dim) * a);
         host.fillRect(0, 0, W, H, 0, 0, 0, (T_OLD.bright || 0) * a);
-        drawLayout(T_OLD.pg.lay, T_OLD.pg.scrollY, T_OLD.textA * a, T_OLD.pg);
+        if (txt) drawLayout(T_OLD.pg.lay, T_OLD.pg.scrollY - sy, T_OLD.textA * a, T_OLD.pg);
       }
     }
   }
   if (wipeImg && wipeA.v > 0) drawCover(img(wipeImg), 0, 0, W, H, wipeA.v);
-  if (pg && pg.secret && !ACC.ok && pg.revealed) {
+  if (opt.ui && pg && pg.secret && !ACC.ok && pg.revealed) {
     const r = { x: W - 90, y: H - 70, w: 76, h: 50 };
     menuButton(r, '???', 1, false); region(r, () => { const s = pg.secret; pg.secret = null; choose(s); });
   }
@@ -944,7 +1008,7 @@ function drawScrollbar(pg) {
 
 // ---------- input: regions, touch, scrolling ----------
 let regions = [];
-function region(r, fn) { regions.push({ r, fn }); }
+function region(r, fn) { if (regionsOn) regions.push({ r, fn }); }
 const touches = new Map();
 let gesture = null, twoFinger = false;
 function hit(r, x, y) { return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; }
@@ -998,6 +1062,7 @@ function touchMove(x, y) {
 function helpMax(st) { return Math.max(0, (st.helpLay ? st.helpLay.height : 0) + 60 - H); }
 function touchEnd(x, y, g) {
   const st = scrollTarget();
+  if (g.held) return;   // the long press already opened the Table of Contents
   const top = overlays[overlays.length - 1];
   if (g.moved && top && top.swipe && Math.abs(x - g.x0) > 40 && Math.abs(x - g.x0) > Math.abs(y - g.y0)) { top.swipe(x - g.x0); return; }
   if (g.moved && top && top.scrollFn && !top.scrollable) return;
@@ -1006,7 +1071,7 @@ function touchEnd(x, y, g) {
       const L = g.last, a = L[0], b = L[L.length - 1], v = b[0] > a[0] ? -(b[1] - a[1]) / (b[0] - a[0]) : 0;
       st.scroll = st.scroll || {}; st.scroll.v = clamp(v, -4000, 4000); st.scroll.target = null;
       if (st === cur) {
-        const lim = H * 0.15;
+        const lim = TH * 0.15;
         if (st.pull > lim / 2 && st.startBottom && st.revealed) { st.pull = 0; st.scroll.v = 0; next(); }
         else if (st.pull < -lim / 2 && st.startTop) { st.pull = 0; st.scroll.v = 0; back(); }
         st.pullAnim = new Tw(st.pull).to(0, 0.25, easeOut); st.pull = 0;
@@ -1026,7 +1091,8 @@ function gameTap(x, y) {
   const pg = cur;
   if (!pg.revealed) { reveal(pg); return; }
   if (busy || pg.choiceAnim) return;
-  for (const b of pg.choices) if (hit({ x: b.x, y: b.y - pg.scrollY, w: b.w, h: b.h }, x, y)) { pickChoice(b); return; }
+  const sc = apart() ? 0 : pg.scrollY;   // choices on their own screen do not scroll
+  for (const b of pg.choices) if (hit({ x: b.x, y: b.y - sc, w: b.w, h: b.h }, x, y)) { pickChoice(b); return; }
   const edge = W * 0.3;
   if (x < edge || x > W - edge) {
     const fwd = (x > W - edge) === (S.dir !== 'L');
@@ -1034,6 +1100,7 @@ function gameTap(x, y) {
     return;
   }
   if (atBottom(pg)) { if (pg.linear) next(); else focusChoices(); }
+  else if (apart()) { pg.scroll.target = clamp(pg.scrollY + TH * 0.75, 0, maxScroll(pg)); sbarT = NOW; }   // the text is on the other screen: a tap reads on
 }
 function scrollBy(st, d) {
   if (st === cur) { st.scrollY = clamp(st.scrollY + d, 0, maxScroll(st)); sbarT = NOW; }
@@ -1089,18 +1156,18 @@ function onButton(name, down) {
     case 'ok':
       if (!pg.revealed) { reveal(pg); break; }
       if (pg.choices.length && pg.focus >= 0 && atBottom(pg)) { pickChoice(pg.choices[pg.focus]); break; }
-      if (!atBottom(pg)) { pg.scroll.target = clamp(pg.scrollY + H * 0.75, 0, maxScroll(pg)); break; }
+      if (!atBottom(pg)) { pg.scroll.target = clamp(pg.scrollY + TH * 0.75, 0, maxScroll(pg)); break; }
       if (pg.linear) next(); else focusChoices();
       break;
     case 'cancel': case 'l': back(); break;
     case 'r': if (pg.linear) next(); else focusChoices(); break;
     case 'down':
       if (pg.choices.length && atBottom(pg)) { pg.focus = Math.min(pg.choices.length - 1, pg.focus + 1); focusChoices(); }
-      else pg.scroll.target = clamp(pg.scrollY + H * 0.4, 0, maxScroll(pg));
+      else pg.scroll.target = clamp(pg.scrollY + TH * 0.4, 0, maxScroll(pg));
       sbarT = NOW; break;
     case 'up':
       if (pg.choices.length && pg.focus > 0) { pg.focus--; focusChoices(); }
-      else { pg.focus = -1; pg.scroll.target = clamp(pg.scrollY - H * 0.4, 0, maxScroll(pg)); }
+      else { pg.focus = -1; pg.scroll.target = clamp(pg.scrollY - TH * 0.4, 0, maxScroll(pg)); }
       sbarT = NOW; break;
     case 'right': if (S.dir !== 'L') next(); else back(); break;
     case 'left': if (S.dir !== 'L') back(); else next(); break;
@@ -1130,7 +1197,7 @@ function accelStep() {
 
 // ---------- system keyboard ----------
 let imeSt = null;
-function openIME(initial, done) { imeSt = { buf: '', done, initial: initial || '', t0: NOW }; host.ime(true); }
+function openIME(initial, done) { imeSt = { buf: '', done, initial: initial || '', t0: NOW }; host.ime(true, initial || ''); }
 function onIME(s) {
   if (!imeSt) return;
   if (s === '\n') { const st = imeSt; imeSt = null; host.ime(false); st.done(st.buf); return; }
@@ -1145,7 +1212,7 @@ function drawIME() {
   host.fillRect(0, 0, W, H, 0, 0, 0, 0.6);
   const f = uiFont(24);
   centerText(f, imeSt.buf + '|', W / 2, H * 0.45, WHITE, 1, 0.6);
-  if (!host.vita) centerText(uiFont(16), 'Type, then press Enter', W / 2, H * 0.5, [200, 200, 200], 1);
+  if (!host.vita && !host.n3ds) centerText(uiFont(16), 'Type, then press Enter', W / 2, H * 0.5, [200, 200, 200], 1);
 }
 
 // ---------- killer's name ----------
@@ -1223,8 +1290,8 @@ function openToc() {
   const pos = history.length;
   let sel = list.findIndex(c => c.start.idx <= pos && pos <= c.end); if (sel < 0) sel = list.length - 1;
   const o = pushOverlay({ name: 'toc', bg: bgs.length ? bgs[Math.floor(Math.random() * bgs.length)] : null, list, sel: Math.max(0, sel), pos: new Tw(Math.max(0, sel)) });
-  const BW = W, BH = W * 1.5, BY = (H - BH) / 2;
-  const R = (px, py, pw, ph) => ({ x: px * BW, y: BY + py * BH, w: pw * BW, h: ph * BH });
+  const BH = Math.min(W * 1.5, H), BW = BH / 1.5, BX = (W - BW) / 2, BY = (H - BH) / 2;   // the original 320x480 layout, fitted
+  const R = (px, py, pw, ph) => ({ x: BX + px * BW, y: BY + py * BH, w: pw * BW, h: ph * BH });
   const jump = () => {
     const c = o.list[o.sel]; if (!c) return;
     popOverlay(o);
@@ -1244,13 +1311,13 @@ function openToc() {
     drawImg(band, b1.x, b1.y, b1.w, b1.h, 1); drawImg(band, b2.x, b2.y, b2.w, b2.h, 1);
     const fBig = uiFont(BW * 0.056), fSm = uiFont(BW * 0.026), fCh = uiFont(BW * 0.05);
     const t1 = STR.PageJump_Title0 || 'Table of Contents', t2 = STR.PageJump_Title1 || '(Jump to Chapter Start)';
-    const w1 = tw(fBig, t1), w2 = tw(fSm, t2), tx = (BW - w1 - w2 - 6) / 2;
+    const w1 = tw(fBig, t1), w2 = tw(fSm, t2), tx = BX + (BW - w1 - w2 - 6) / 2;
     text(fBig, t1, tx, b1.y + (b1.h - fBig.h) / 2, WHITE, 1, 0.6); text(fSm, t2, tx + w1 + 6, b1.y + (b1.h - fBig.h) / 2 + fBig.asc - fSm.asc, WHITE, 1, 0.6);
     const c = o.list[o.sel];
-    if (c) centerText(fCh, c.title, BW / 2, b2.y + (b2.h - fCh.h) / 2, WHITE, 1, 0.6);
+    if (c) centerText(fCh, c.title, BX + BW / 2, b2.y + (b2.h - fCh.h) / 2, WHITE, 1, 0.6);
     // card
     const jt = BY + 0.22 * BH, jh = 0.70 * BH;
-    const card = { x: 0.256 * BW, y: jt + 0.036 * jh, w: 0.488 * BW, h: 0.545 * jh };
+    const card = { x: BX + 0.256 * BW, y: jt + 0.036 * jh, w: 0.488 * BW, h: 0.545 * jh };
     if (c) {
       const pic = img(thumbKey(c.bg) && imgKey(c.bg) ? imgKey(c.bg) : thumbKey(c.bg));
       host.fillRect(card.x + card.w * 0.08, card.y + card.h * 0.055, card.w * 0.84, card.h * 0.89, 0, 0, 0, 1);
@@ -1259,7 +1326,7 @@ function openToc() {
     drawImg(pj('pj_frame_01.png'), card.x, card.y, card.w, card.h, 1);
     region(card, jump);
     const sw = pj('pj_swipe.png');
-    const al = { x: 0.02 * BW, y: jt + 0.08 * jh, w: 0.1 * BW, h: 0.46 * jh }, ar = { x: BW - 0.12 * BW, y: al.y, w: al.w, h: al.h };
+    const al = { x: BX + 0.02 * BW, y: jt + 0.08 * jh, w: 0.1 * BW, h: 0.46 * jh }, ar = { x: BX + BW - 0.12 * BW, y: al.y, w: al.w, h: al.h };
     if (sw) { drawImg(sw, al.x, al.y, al.w, al.h, 0.9); host.drawImage(sw.id, 0, 0, sw.w, sw.h, ar.x, ar.y, ar.w, ar.h, 0.9, 180); }
     region(al, () => move(-1)); region(ar, () => move(1));
     // thumbnails strip
@@ -1268,14 +1335,14 @@ function openToc() {
     host.clip(th.x, th.y, th.w, th.h);
     const tw_ = 0.18 * BW, thh = 0.24 * BW, cy = th.y + th.h / 2;
     o.list.forEach((ch, i) => {
-      const x = BW / 2 + (i - o.pos.v) * tw_ - tw_ / 2; if (x < -tw_ || x > BW) return;
+      const x = BX + BW / 2 + (i - o.pos.v) * tw_ - tw_ / 2; if (x < BX - tw_ || x > BX + BW) return;
       const r = { x, y: cy - thh / 2, w: tw_, h: thh };
       host.fillRect(r.x + 2, r.y, r.w - 4, r.h, 0, 0, 0, 1);
       const p = img(thumbKey(ch.bg)); if (p) { host.clip(Math.max(th.x, r.x + 2), r.y, r.w - 4, r.h); drawCover(p, r.x + 2, r.y, r.w - 4, r.h, 1); host.clip(th.x, th.y, th.w, th.h); }
       region(r, () => { o.sel = i; o.pos.to(i, 0.25, easeOut); });
     });
     host.clip();
-    const fs = pj('pj_frame_02.png'); if (fs) { const w = 0.28 * BW, h = 0.335 * BW; drawImg(fs, BW / 2 - w / 2, cy - h / 2, w, h, 1); }
+    const fs = pj('pj_frame_02.png'); if (fs) { const w = 0.28 * BW, h = 0.335 * BW; drawImg(fs, BX + BW / 2 - w / 2, cy - h / 2, w, h, 1); }
     const sv = R(0.006, 1 - 0.009 - 0.0635, 0.3328, 0.0635), rt = R(1 - 0.006 - 0.3328, 1 - 0.009 - 0.0635, 0.3328, 0.0635);
     drawImg(pj('pj_save.png'), sv.x, sv.y, sv.w, sv.h, 1); region(sv, () => openSaves('save'));
     drawImg(pj('pj_back.png'), rt.x, rt.y, rt.w, rt.h, 1); region(rt, () => popOverlay(o));
@@ -1291,7 +1358,7 @@ function openToc() {
 }
 function share() {
   const c = cur ? chapterTitleFor(cur.id, cur.ctx) : '';
-  dialog('Share', "Banshee's Last Cry: " + c + ' #BansheesLastCry\n\nThe Vita can\'t post this for you; share it from another device.', [['Close']]);
+  dialog('Share', "Banshee's Last Cry: " + c + ' #BansheesLastCry\n\nThe ' + PLATFORM + ' can\'t post this for you; share it from another device.', [['Close']]);
 }
 
 // ---------- save data page ----------
@@ -1299,10 +1366,11 @@ function openSaves(mode) {
   const o = pushOverlay({ name: 'saves', focus: 0, scrollable: null });
   const cache = {};
   const get = (k) => { if (!(k in cache)) cache[k] = LS.get(k, null); return cache[k]; };
+  o.scroll = 0; o.cellY = [];
   o.draw = () => {
     host.fillRect(0, 0, W, H, 12, 12, 13, 1);
-    navBar(mode === 'save' ? (STR.Config_Save || 'Save Data') : (STR.Config_Save || 'Save Data'), 'Back', () => popOverlay(o));
-    let y = 90;
+    let y = 90 - o.scroll;
+    host.clip(0, 64, W, H - 64);
     const f = uiFont(18);
     if (mode === 'save') { wrapText(f, STR.ConfigSave_HeadMessage || 'Saving story data. Is it okay to overwrite?', W - 60).forEach(l => { centerText(f, l, W / 2, y, [200, 200, 200], 1); y += 26; }); y += 10; }
     const cells = [];
@@ -1317,13 +1385,19 @@ function openSaves(mode) {
         const doSave = () => { const sn = snapshot(); if (sn) { LS.set(k, sn); delete cache[k]; toast('Saved'); } };
         if (s) dialog(STR.Config_Save || 'Save Data', STR.BookMarkCell_overwriteLabel || 'Overwrite this data', [['Cancel'], ['OK', doSave]]); else doSave();
       };
-      region(r, act); r.act = act; o.cellsList = cells; cells[i].act = act;
+      if (r.y + r.h > 64) region(r, act);
+      r.act = act; o.cellsList = cells; cells[i].act = act; o.cellY[i] = r.y + o.scroll;
       y += 170;
     });
+    host.clip();
+    o.contentH = y + o.scroll;
+    navBar(mode === 'save' ? (STR.Config_Save || 'Save Data') : (STR.Config_Save || 'Save Data'), 'Back', () => popOverlay(o));
   };
+  const show = () => { const cy = o.cellY[o.focus]; if (cy == null) return; if (cy - o.scroll + 170 > H) o.scroll = cy + 170 - H; if (cy - o.scroll < 70) o.scroll = Math.max(0, cy - 90); };
+  o.scrollFn = (d) => { o.scroll = clamp(o.scroll + d, 0, Math.max(0, (o.contentH || 0) - H + 20)); };
   o.button = (n) => {
     const nCells = (mode === 'load' ? 1 : 0) + SLOTS.length;
-    if (n === 'up') { o.focus = (o.focus + nCells - 1) % nCells; return true; } if (n === 'down') { o.focus = (o.focus + 1) % nCells; return true; }
+    if (n === 'up') { o.focus = (o.focus + nCells - 1) % nCells; show(); return true; } if (n === 'down') { o.focus = (o.focus + 1) % nCells; show(); return true; }
     if (n === 'ok' && o.cellsList && o.cellsList[o.focus]) { o.cellsList[o.focus].act(); return true; }
     return false;
   };
@@ -1338,9 +1412,10 @@ function saveCell(r, s, focus) {
   if (s) { const th = img(thumbKey(s.bg)); if (th) { host.clip(r.x + 4, r.y + 4, tw0 - 6, r.h - 8); drawCover(th, r.x + 4, r.y + 4, tw0 - 6, r.h - 8, 1); host.clip(); } }
   const fmt = STR.ConfigSave_DataCharFormat || 'The Story of %@ and %@', none = STR.ConfigSave_NoDataPlayerName || '**';
   const story = s ? fmt.replace('%@', s.names.main).replace('%@', s.names.sub) : fmt.replace('%@', none).replace('%@', none);
-  const f = font('m', 0, 0, 19), fs = font('m', 0, 0, 15);
-  text(f, story, r.x + tw0 + 12, r.y + 12, [90, 90, 90], 1);
-  if (s && s.title) text(f, s.title, r.x + tw0 + 12, r.y + 46, [40, 40, 40], 1);
+  const avail = r.w - tw0 - 20, fit = (str, px) => { let f = font('m', 0, 0, px); while (px > 10 && tw(f, str) > avail) f = font('m', 0, 0, --px); return f; };
+  const fs = font('m', 0, 0, 15);
+  text(fit(story, 19), story, r.x + tw0 + 12, r.y + 12, [90, 90, 90], 1);
+  if (s && s.title) text(fit(s.title, 19), s.title, r.x + tw0 + 12, r.y + 46, [40, 40, 40], 1);
   const when = s ? new Date(s.time).toISOString().replace('T', ' ').slice(0, 19).replace(/-/g, '-') : (STR.ConfigSave_NoDataDate || '****-**-** **:**:**');
   text(fs, when, r.x + tw0 + 12, r.y + r.h * 0.75 + 10, [110, 110, 110], 1);
 }
@@ -1361,7 +1436,7 @@ function openSettings() {
   const slider = (label, key, min, max, step, after) => ({ label, slider: { key, min, max, step }, after });
   const dirL = { R: STR.ConfigPageDirection_Right || 'Right', L: STR.ConfigPageDirection_Left || 'Left' };
   const goreL = [STR.ConfigViolence_Nothing || 'Low', STR.ConfigViolence_Blur || 'Medium', STR.ConfigViolence_Normal || 'High'];
-  const relayoutAll = () => { if (cur) relayout(cur); };
+  const relayoutAll = () => { updTH(); if (cur) relayout(cur); };
   const root = page(STR.Config_Title || 'Settings', () => [
     { head: '' },
     { label: STR.Config_Brightness || 'Brightness', fn: () => push(page(STR.Config_Brightness || 'Brightness', () => [{ preview: 1 }, slider(STR.ConfigBrightness_Background || 'Background Brightness', 'bgb', 0, 100, 5, () => applyDim()), slider(STR.ConfigBrightness_Character || 'Text Brightness', 'textb', 30, 100, 5)])) },
@@ -1377,7 +1452,9 @@ function openSettings() {
     { label: STR.Config_ProductInfo || 'Product Infomation', fn: () => productInfo() },
     { head: 'Port-specific settings' },
     { label: 'Vibration', detail: fxLabels[S.fx], fn: () => push(choice('Vibration', 'fx', [['shake', 'Screen shake'], ['off', 'Off']])) },
-    { label: 'Screen orientation', detail: S.rot === 270 ? 'Rotate left' : 'Rotate right', fn: () => push(choice('Screen orientation', 'rot', [[90, 'Rotate right'], [270, 'Rotate left']], () => host.setRotation(S.rot))) },
+    DUAL ? { label: 'Text screen', detail: S.ts === 'bottom' ? 'Touch screen' : 'Top screen', fn: () => push(choice('Text screen', 'ts', [['top', 'Top screen'], ['bottom', 'Touch screen']], () => { updTH(); relayoutAll(); })) } : null,
+    DUAL ? { label: 'Holding the 3DS', detail: S.rot === 270 ? 'Top screen right' : 'Top screen left', fn: () => push(choice('Holding the 3DS', 'rot', [[90, 'Top screen left'], [270, 'Top screen right']], () => host.setRotation(S.rot))) }
+      : { label: 'Screen orientation', detail: S.rot === 270 ? 'Rotate left' : 'Rotate right', fn: () => push(choice('Screen orientation', 'rot', [[90, 'Rotate right'], [270, 'Rotate left']], () => host.setRotation(S.rot))) },
     { label: 'Back up saves', fn: backupSaves },
     { label: 'Restore saves', fn: restoreSaves },
     { label: 'Erase progress', danger: 1, fn: resetProgress }
@@ -1389,7 +1466,7 @@ function openSettings() {
     const p = o.stack[o.stack.length - 1];
     host.fillRect(0, 0, W, H, 12, 12, 13, 1);
     navBar(p.title, o.stack.length > 1 ? o.stack[o.stack.length - 2].title : (STR.Config_ButtonBack || 'Return'), o.back);
-    const rows = p.rowsFn();
+    const rows = p.rowsFn().filter(Boolean);
     o.rows = rows.filter(r => r.fn || r.slider);
     let y = 80 - (o.scroll || 0);
     const f = uiFont(20), fd = uiFont(17), fh = uiFont(13);
@@ -1504,15 +1581,24 @@ function frame(dt, lx, ly, rx, ry) {
   void ly; void ry;
   physicsStep(dt);
   if (cur && cur.dirty) relayout(cur);
-  if (screen === 'logos') drawLogos();
-  else if (screen === 'title') drawTitle();
+  // 3DS has no two-finger tap: holding a finger still on the touch screen opens the Table of Contents
+  if (DUAL && gesture && !gesture.moved && !gesture.held && NOW - gesture.t0 > 0.7 && touches.size === 1 && screen === 'game' && !anyOverlay() && cur && !busy) { gesture.held = true; openToc(); }
+  for (let i = 0; i < SCR.length; i++) drawScreen(i);
+  useScr(UI);
+}
+function drawScreen(i) {
+  useScr(i);
+  const ui = i === UI;
+  if (ui) regions = [];
+  if (screen === 'logos') { if (i === 0) drawLogos(); }
+  else if (screen === 'title') drawTitle(DUAL ? (ui ? 'menu' : 'art') : 'all');
   else if (screen === 'names') {
-    drawNames();
+    if (ui) drawNames(); else drawCover(img(imgKey('s_house.jpg')), 0, 0, W, H, 1);
     if (namesSt.leaving) host.fillRect(0, 0, W, H, 0, 0, 0, clamp((NOW - namesSt.leaving) / 1, 0, 1));
-  } else if (screen === 'game') drawGame();
+  } else if (screen === 'game') drawGame({ text: !DUAL || i === textScr(), ui });
+  if (!ui) return;
   // overlays: only the top one takes input (regions drawn earlier are discarded)
-  overlays.forEach((o, i) => { if (i === overlays.length - 1) regions = []; o.draw(); });
-  if (overlays.length && regions.length === 0) { /* overlay without buttons */ }
+  overlays.forEach((o, k) => { if (k === overlays.length - 1) regions = []; o.draw(); });
   if (NOW - toastT < 2.2) {
     const f = uiFont(18), w = tw(f, toastMsg) + 40, a = clamp((2.2 - (NOW - toastT)) / 0.3, 0, 1);
     host.roundRect((W - w) / 2, H * 0.86, w, 44, 22, 0, 0, 0, 0.75 * a); centerText(f, toastMsg, W / 2, H * 0.86 + (44 - f.h) / 2, WHITE, a);
@@ -1521,9 +1607,15 @@ function frame(dt, lx, ly, rx, ry) {
   if (imeSt) regions = [];
 }
 function drawBoot() {
-  const f = uiFont(20);
-  const lines = wrapText(f, "Slop's Last Cry needs your game files.\n\nOn a PC, open setup.html from the web version, convert your .ipa, then press \"Make PS Vita files\". Copy the slc-vita folder it makes to this Vita as " + DATA + " (for example with VitaShell), then start the game again.\n\nPress any button to exit.", W - 70);
-  lines.forEach((l, i) => text(f, l, 35, 160 + i * 32, WHITE, 1));
+  for (let i = 0; i < SCR.length; i++) {
+    useScr(i); if (i !== UI) continue;
+    const f = uiFont(DUAL ? 17 : 20);
+    const msg = DUAL
+      ? "Slop's Last Cry needs your game files.\n\nOn a PC, open setup.html from the web version, convert your .ipa, then press \"Make 3DS files\". Copy the slc-3ds folder it makes to your SD card as " + DATA.replace('sdmc:/', '') + ", then start the game again.\n\nPress any button to exit."
+      : "Slop's Last Cry needs your game files.\n\nOn a PC, open setup.html from the web version, convert your .ipa, then press \"Make PS Vita files\". Copy the slc-vita folder it makes to this Vita as " + DATA + " (for example with VitaShell), then start the game again.\n\nPress any button to exit.";
+    const lines = wrapText(f, msg, W - (DUAL ? 40 : 70));
+    lines.forEach((l, k) => text(f, l, DUAL ? 20 : 35, (DUAL ? 30 : 160) + k * f.h * 1.3, WHITE, 1));
+  }
 }
 const _onButton = onButton;
 globalThis.onButton = function (n, d) { if (!started) { if (d) host.quit(); return; } _onButton(n, d); };

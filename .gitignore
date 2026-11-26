@@ -22,3 +22,8 @@ vita/build/
 web/setup/vita-harness.html
 vita/js/test.js
 vita/quickjs/
+n3ds/build/
+n3ds/quickjs/
+n3ds/stb/
+n3ds/*.3dsx
+web/setup/n3ds-harness.html
